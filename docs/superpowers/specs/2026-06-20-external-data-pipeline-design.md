@@ -1,9 +1,9 @@
-# External-Data Extraction Pipeline (CDMX) — Design
+# External-Signal ROI Pipeline (CDMX) — Design
 
 **Date:** 2026-06-20
 **Status:** Approved (design) — pending implementation
-**Component:** Priority Engine input — ingestion of external geolocated risk signals (README §4)
-**Scope:** **Mexico City (CDMX) only.** Monterrey / Nuevo León are explicitly out of scope for this iteration.
+**Component:** Priority Engine / Latent Issue Detection input (README §4–5)
+**Scope:** **Mexico City (CDMX) only.** Monterrey / Nuevo León are out of scope.
 
 Builds on the research in
 [`docs/research/external-risk-datasets.md`](../../research/external-risk-datasets.md) and
@@ -11,247 +11,265 @@ Builds on the research in
 
 ---
 
-## 1. Scope
+## 1. Goal & scope
 
-Define and build a **production-ready pipeline that extracts up-to-date, point-granularity
-(lat/long) urban-risk signals for CDMX** and lands them for the Priority Engine to consume.
+The **product of this pipeline is a set of granular ROI polygons with risk semantics**, not
+raw datasets. External point signals are an *intermediate*: they are extracted, normalized,
+then aggregated into **Regions of Interest (ROIs)** — small zones that imply a mobility (or,
+optionally, safety) conflict and therefore **motivate a visual inspection** whose job is to
+find the *root cause* (missing lighting/signage, bad geometry, pothole, blocked drainage…).
 
-In scope:
+**Strict requirements (from the user):**
+1. Construct **granular ROI polygons** carrying **risk semantics**.
+2. Persist ROIs in a **database**, each ROI linking **(a) object references** back to the
+   contributing source data and **(b) a generated issue description** — the context handed to
+   the VLM/analysis step (README §5).
+3. ROIs are **time-sensitive**: there is a **current** set, and a recompute **supersedes** the
+   prior current ROIs (logical supersession + history, mirroring the observation contract).
+4. **If a source doesn't help draw these ROIs, scrap it.**
 
-- **Batch open-portal point datasets** (CKAN `datos.cdmx.gob.mx`): crime, crashes,
-  citizen reports, water/flooding, emergencies.
-- **Geocoded tier** — address-level open data that has no lat/long but is *fresher*
-  (`infracciones`, Sep 2025) plus **news / nota-roja → LLM geocoding** (live).
+In scope: extraction of contributing CDMX point/geocodable signals → per-dimension ROI
+computation → ROI persistence with supersession.
 
-Explicitly **out of scope** (decided with the user):
+Out of scope: Waze/GDELT/GBFS/social feeds; the VLM inspection itself (consumes ROIs);
+the observation contract (ROIs are inputs to latent detection, a separate entity).
 
-- Real-time partner feeds (Waze for Cities), GDELT, ECOBICI GBFS, social-media scraping.
-- A fully-normalized relational model for the signals. The pipeline lands **raw + staging**;
-  a *thin optional* PostGIS serving table is the only DB write (see §6.4).
-- These are **external risk signals**, distinct from `observations` (our own detected
-  infrastructure issues, see the observation-contract spec). They share neither schema
-  nor table; the Priority Engine joins them spatially.
+ROIs are tagged by **risk dimension** so the application can include/exclude any dimension
+(notably crime) at query time — the app decides what to use.
 
-**Hard requirement (unchanged):** per-record geolocation. A source qualifies if it has
-lat/long *or* an address precise enough to geocode to a point.
+## 2. Source catalog → risk dimensions (live-verified 2026-06-20)
 
-## 2. Source catalog (live-verified 2026-06-20)
+Each kept source feeds exactly one **risk dimension**. Sources that don't contribute to
+granular conflict ROIs are dropped.
 
-Verified directly against the CKAN API today. Dates are **actual data coverage**, not
-portal timestamps. Exact lat/long column names and download handles are locked for the build.
-
-### 2.1 Tier P — direct point (lat/long per record)
-
-| `source_id` | CKAN slug | Signal | Lat/long cols | Freshest data | Cadence |
-|---|---|---|---|---|---|
-| `fgj_carpetas` | `carpetas-de-investigacion-fgj-de-la-ciudad-de-mexico` | crime | `latitud`,`longitud` | **2025-01** | monthly snapshots (see §5.2) |
-| `fgj_victimas` | `victimas-en-carpetas-de-investigacion-fgj` | crime victims | `latitud`,`longitud` | 2024 | annual-ish |
-| `ssc_hechos_transito` | `hechos-de-transito-registrados-por-la-ssc-2024-serie-de-datos-ampliada-no-comparativa` | crashes | `latitud`,`longitud` | 2024 | annual batch |
-| `c5_incidentes_viales` | `incidentes-viales-c5` | traffic incidents | lat/long | 2024-02 (stalled) | historical prior |
-| `locatel_0311` | `0311` | citizen reports (baches/agua) | `latitud`,`longitud` | 2024 (stalled) | historical prior |
-| `sacmex_reportes_agua` | `reportes-de-agua` | water / flooding (`encharcamientos`) | `latitud`,`longitud` | 2024 (stalled) | historical prior |
-| `c5_911` | `llamadas-numero-de-atencion-a-emergencias-911` | emergency calls | lat/long (**block centroid**) | 2022-H1 (discontinued) | historical prior |
-| `ruse_emergencias` | `registro-unico-de-situaciones-de-emergencia` | civil-protection / flood | point geom (SHP/CSV) | 2020 (discontinued) | historical prior |
-
-### 2.2 Tier G — geocoded (no lat/long; address or free text → point)
-
-| `source_id` | Source | Signal | Freshest data | Geo input |
+| `source_id` | CKAN slug / origin | Risk dimension | Geo | Freshest data |
 |---|---|---|---|---|
-| `infracciones_parq` | `infracciones-al-reglamento-de-transito-de-la-ciudad-de-mexico` | traffic violations (officer) | **Q3 2025** | `en_la_calle`,`entre_calle`,`y_calle`,`colonia`,`alcaldia` |
-| `infracciones_ee` | `…-equipos-electronicos` | camera/photo violations | **Q3 2025** | same address fields |
-| `news_nota_roja` | RSS/sitemaps of CDMX outlets | crashes/crime/incidents | **live / daily** | free-text location → LLM extract + geocode |
+| `ssc_hechos_transito` | `hechos-de-transito-registrados-por-la-ssc-2024-…` | `crash` | point `latitud/longitud` | 2024 |
+| `c5_incidentes_viales` | `incidentes-viales-c5` | `crash` | point | 2024-02 (stalled, density prior) |
+| `accidentes_ciclistas` | `puntos-de-accidentes-de-ciclistas` (SHP) | `crash` | point | 2023 (vulnerable-user prior) |
+| `accidentes_peatones` | `puntos-de-accidentes-a-peatones` (SHP) | `crash` | point | 2023 (vulnerable-user prior) |
+| `news_nota_roja` | RSS/sitemaps, CDMX outlets | `crash` | geocoded (LLM) | **live** |
+| `infracciones_ee` | `…-equipos-electronicos` | `violation` | geocoded (address) | **Q3 2025** |
+| `infracciones_parq` | `infracciones-al-reglamento-de-transito-…` (moving-violation subset) | `violation` | geocoded | **Q3 2025** |
+| `sacmex_encharcamientos` | `reportes-de-agua` (`encharcamientos` subset) | `flooding` | point | 2024 |
+| `locatel_0311_agua` | `0311` (water subset) | `flooding` | point | 2024 |
+| `locatel_0311_baches` | `0311` (`baches`/road-surface subset) | `road_surface` | point | 2024 |
+| `fgj_carpetas` | `carpetas-de-investigacion-fgj-…` | `crime` | point | **2025-01** |
+| `fgj_victimas` | `victimas-en-carpetas-de-investigacion-fgj` | `crime` | point | 2024 |
 
-**Recency reality to design around:** the freshest *direct-point* batch is FGJ crime
-(through Jan 2025); everything else point-level is 2024 or older. The only **fresher than
-2024** signals are the geocoded tier — `infracciones` (Sep 2025) and `news` (live). The
-pipeline must therefore treat the geocoded tier as first-class, not an afterthought.
+**Dropped (don't serve granular ROIs):** `c5_911` (lat/long is **block-centroid** → fails the
+granularity requirement; discontinued 2022); `ruse_emergencias` (2020, flooding already
+covered by SACMEX); `socavones` (alcaldía-aggregated); `atlas-de-riesgo-*` (AGEB/grid surfaces).
 
-### 2.3 Rejected
+**Recency note:** the only signals fresher than 2024 are `infracciones` (Q3 2025), `news`
+(live), and FGJ crime (Jan 2025). The pipeline handles staleness two ways: a **recency-decay**
+weight in the risk score (§4) and **ROI supersession** on recompute (§6).
 
-`socavones-en-las-alcaldias-en-la-cdmx` (alcaldía-aggregated counts, no points);
-`atlas-de-riesgo-*` (AGEB/grid hazard surfaces, not incident points); air-quality
-networks (RAMA/REDMET/REDMA — station context, not risk incidents).
+**FGJ freshness lever:** FGJ publishes monthly snapshots at
+`https://archivo.datos.cdmx.gob.mx/FGJ/carpetas/carpetasFGJ_acumulado_YYYY_MM.csv`; the
+adapter probes newest-first and falls back to the CKAN-linked URL, auto-picking fresher data.
 
-## 3. Architecture
-
-**Registry-driven medallion-lite on object storage.** A declarative source registry feeds
-thin per-kind adapters that write a **raw zone** (exact bytes + manifest) and a **staging
-zone** (one canonical point-event schema as partitioned Parquet). A scheduler-agnostic CLI
-runs sources on per-source cadence. Object storage and the optional serving DB are Supabase.
+## 3. Architecture — three stages
 
 ```
-registry/sources.yaml
-        │  (one declarative entry per source — new source = config, not code)
-        ▼
-   adapter.fetch()  ── ckan_csv | news_geocode ──┐
-        │ exact source bytes                      │
-        ▼                                         │
-   RAW zone  (Supabase Storage)                   │  manifest.json
-   raw/<source_id>/<fetch_ts>/<file>              │  (url, sha256, rows, license, fetched_at)
-        │                                         │
-        ▼  normalize() → canonical record         │
-   STAGING zone (Supabase Storage)  ◀─────────────┘
-   staging/<source_id>/event_date=YYYY-MM-DD/part.parquet
-        │
-        ├──────────────► Priority Engine reads Parquet (source of truth)
-        ▼  (optional, thin)
-   external_signals  (Supabase Postgres + PostGIS)  ── queryable serving projection
+STAGE 1  EXTRACT      adapters → raw + staging signals in Supabase Storage  ("objects")
+                      → load normalized rows into external_signals (PostGIS)
+STAGE 2  COMPUTE ROIs per risk dimension: cluster weighted points (ST_ClusterDBSCAN)
+                      → polygon (concave hull + buffer) → risk semantics + description
+STAGE 3  PERSIST      insert rois (current), supersede prior current ROIs for those
+                      dimensions; keep history → current_rois view, time-travel
 ```
 
-**Stack:** Python 3.11 · `httpx` (fetch) · `pyarrow`/`pandas` (normalize→Parquet) ·
-`fsspec`+`s3fs` (storage abstraction; local FS in dev, Supabase Storage in prod) ·
-`pydantic` (config + schema validation) · `typer` (CLI) · `psycopg` (serving loader) ·
-Claude (news extraction + address geocoding fallback) · `pytest`.
+**Stack:** Python 3.11 · `httpx` · `pyarrow`/`pandas` · `fsspec`+`s3fs` (Supabase Storage;
+local FS in dev) · `pydantic` · `typer` (CLI) · `psycopg` (PostGIS) · Claude (news extraction,
+ROI description, geocode fallback) · `pytest`.
 
-**Why this shape:** matches the chosen "raw + staging only" sink; runs identically on a
-laptop (local FS) and in cloud (Supabase S3); adding a source is a registry entry, echoing
-the observation-contract's "a new type is a row, not a migration" principle.
+**Storage decision (mine to make):**
+- **Supabase Storage** — raw zone (exact bytes + manifest) + staging Parquet. These are the
+  *objects* ROIs reference.
+- **Supabase Postgres + PostGIS** — `external_signals` (clustering input, rebuildable),
+  `roi_runs`, `rois` (the product), `current_rois` view. This is the strict-requirement DB.
 
-## 4. Components
+## 4. Risk dimensions & weighting
 
-### 4.1 Source registry (`registry/sources.yaml`)
-One entry per `source_id`. Declarative fields:
-`kind` (`ckan_csv`|`news_geocode`), `enabled`, `ckan_slug` *or* `feeds[]`, `resource_match`
-(regex to pick the right CSV resources), `schedule` (cron-ish hint), `tier` (`P`|`G`),
-`event_type`, `column_map` (native→canonical), `attribute_cols[]`, `geom_quality`,
-`bbox_filter` (default CDMX), `license`. The registry **is** the §2 catalog, machine-readable.
+Dimensions (configurable in the registry): `crash`, `violation`, `flooding`, `road_surface`,
+`crime`. Each signal carries a weight used by clustering and scoring:
 
-### 4.2 Adapter: `ckan_csv`
-1. `package_show(slug)` → list resources; select by `resource_match`.
-2. **FGJ special-case:** also probe the monthly archive pattern
-   `…/FGJ/carpetas/carpetasFGJ_acumulado_YYYY_MM.csv` newest-first; use the freshest that
-   resolves, else the CKAN-linked URL (§5.2).
-3. Download with `httpx` (streaming), compute `sha256`, write raw + manifest.
-4. **Skip-if-unchanged:** compare `sha256` and CKAN `last_modified` against per-source state.
-
-### 4.3 Adapter: `news_geocode`
-1. Pull configured **RSS/sitemap** feeds (RSS-first; never blind-scrape — respect
-   `robots.txt`). Candidate CDMX outlets: El Universal *Metrópoli*, La Jornada *Capital*,
-   Milenio CDMX, Excélsior *Comunidad*, Infobae México, La Prensa (OEM nota roja). Exact
-   feed URLs validated at build time; each is a registry `feeds[]` entry.
-2. Filter to incident items (keyword + LLM classify): crash / crime / flooding / collapse.
-3. **LLM extract** `{event_type, location_text, occurred_at}` from title+summary.
-4. **Geocode** `location_text` → point (Nominatim primary; LLM fallback). Attach
-   `geocode_confidence`; intersections/named cross-streets score high, vague areas low.
-5. Land raw (article id, link, extracted JSON) + emit staged points. Store **only extracted
-   facts + the source link**, never full article reproductions (§7).
-
-### 4.4 Normalizer (`core/normalize.py`)
-Maps each source's rows to the canonical record (§5.1) via `column_map`; applies the CDMX
-bbox filter; stamps `geom_quality`; writes Parquet partitioned by `source_id` + `event_date`.
-
-### 4.5 CLI (`cli.py`)
-`ingest run <source_id>` · `ingest run --all` · `ingest run --tier G` · `ingest load-db`
-(optional serving loader) · `ingest status` (freshness/row counts per source).
-
-## 5. Data model & storage
-
-### 5.1 Canonical staged record (external risk signal)
-Distinct from the observation contract. One row per external incident/event.
-
-| Field | Type | Notes |
-|---|---|---|
-| `signal_id` | text (PK) | deterministic `sha256(source_id + native_id|row_hash)` — idempotent re-runs |
-| `source_id` | text | registry id (`fgj_carpetas`, …) |
-| `source_dataset` | text | CKAN slug / feed host |
-| `event_type` | text | canonical taxonomy: `crime`,`crash`,`citizen_report`,`water_flood`,`emergency`,`violation` |
-| `event_subtype` | text | native category (e.g. `delito`, `tipo_incidente`) |
-| `lon`,`lat` | double | WGS84 (EPSG:4326) |
-| `geom_quality` | text | `point` \| `block_centroid` (911) \| `geocoded` (news, infracciones) |
-| `occurred_at` | timestamptz | event time (nullable) |
-| `reported_at` | timestamptz | report/registration time (nullable) |
-| `event_date` | date | partition key (from `occurred_at`/`reported_at`) |
-| `attributes` | json | native fields preserved verbatim |
-| `geocode_confidence` | real | null for Tier P; 0–1 for Tier G |
-| `source_url` | text | provenance |
-| `license` | text | e.g. CC-BY-4.0 |
-| `fetched_at`,`ingested_at` | timestamptz | run provenance |
-
-`geom_quality` is the key downstream lever: the Priority Engine **down-weights**
-`block_centroid` and low-confidence `geocoded` points rather than treating all points equally.
-
-### 5.2 Storage layout (Supabase Storage, S3-compatible)
 ```
-<bucket>/raw/<source_id>/<fetch_ts>/<original_filename>
-<bucket>/raw/<source_id>/<fetch_ts>/manifest.json
-<bucket>/staging/<source_id>/event_date=YYYY-MM-DD/part-*.parquet
-<bucket>/_state/<source_id>.json          # last sha256, last_modified, last_run
+weight = severity(event_type) × recency_decay(occurred_at) × geom_quality_factor
+recency_decay = exp(-ln2 × age_days / half_life_days)      # half_life default 365d
+geom_quality_factor:  point 1.0 · geocoded 0.7 · block_centroid 0.5
 ```
-Raw is immutable (exact bytes, audit + replay). Staging is the consumable contract. Access
-via `fsspec`/`s3fs` against the Supabase S3 endpoint; identical code uses a local path in dev.
 
-### 5.3 Manifest (per raw fetch)
-`{source_id, ckan_slug, resource_id, source_url, sha256, byte_size, row_count, license,
-fetched_at, adapter, adapter_version}` — enables freshness reporting and dedup without
-re-downloading.
+`severity` is a per-event-type table (e.g. fatal crash > injury crash > property crash; flood
+> isolated water report). All weights live in config so they're tunable as real data lands.
 
-## 6. Production concerns
+## 5. ROI computation
 
-### 6.1 Idempotency & incrementality
-Per-source `_state` file holds last `sha256` + CKAN `last_modified`; an unchanged source is
-skipped before download. `signal_id` is deterministic, so re-processing the same rows is a
-no-op (no duplicates) and the serving loader uses `INSERT … ON CONFLICT (signal_id) DO UPDATE`.
+**Method (recommended): native PostGIS `ST_ClusterDBSCAN`.** Deterministic, granular,
+explainable; no extra extension needed. Per dimension, over the current signal set:
 
-### 6.2 Resilience
-CKAN resource URLs are resolved dynamically per run (survive portal reshuffles). Network
-calls retry with backoff. A failing source fails *in isolation*; the run continues and
-reports per-source status. Bad rows (unparseable coords) are quarantined, not fatal.
+1. Project signal points to metric CRS **EPSG:32614** (UTM 14N, CDMX) so `eps` is in meters.
+2. `ST_ClusterDBSCAN(geom, eps := ~100m, minpoints := ~5)` (params per dimension, in config).
+3. Per cluster build the polygon: `ST_ConcaveHull(ST_Collect(points), 0.8)` then a small
+   `ST_Buffer` (~15m) to give the inspection a footprint; store back as `geography(Polygon,4326)`.
+4. Aggregate **risk semantics**: `risk_score = Σ weight`, `signal_count`, `risk_breakdown`
+   (counts per event_type + co-located other-dimension counts), `dominant_type`,
+   `occurred_from/to`, `recency_score`.
+5. Generate **`description`** — a concise inspection brief for the VLM: what's clustered, how
+   much, how recent, nearest street/colonia, and **candidate root causes by dimension**
+   (crash → signage/geometry/lighting/surface; flooding → drainage/grade; violation →
+   signal timing/signage; road_surface → pavement; crime → lighting/visibility). Templated,
+   LLM-polished.
+6. Record **object references**: `contributing_signal_ids[]` and `source_object_refs[]`
+   (Supabase Storage handles of the underlying raw/staging objects).
 
-### 6.3 Scheduling
-Cadence hints live in the registry; the runner is scheduler-agnostic. Suggested:
-batch Tier-P = **monthly** freshness check (data rarely changes); `infracciones` =
-**weekly**; `news` = **hourly/daily**. Wire via cron / Supabase scheduled function /
-GitHub Actions — the CLI is the single entrypoint.
+Alternative considered: H3 hexbin (res 9–10) — fixed grid, needs the `h3` extension; kept as a
+fallback if a grid is preferred over density clusters.
 
-### 6.4 Optional Supabase Postgres serving loader
-`ingest load-db` reads staging Parquet → upserts into `external_signals` (PostGIS):
-`geom geography(Point,4326)` via `ST_SetSRID(ST_MakePoint(lon,lat),4326)`, GIST index,
-plus `event_type`/`event_date` btree indexes. Files remain source of truth; the table is a
-rebuildable projection so the Priority Engine can spatial-join in SQL. **Optional** — the
-pipeline never depends on the DB being up.
+**Granularity:** `eps≈100m` + concave hulls keep ROIs intersection/block-scale, not
+neighborhood blobs — satisfying the "granular ROIs" requirement; tunable per dimension.
 
-### 6.5 Config / secrets
-Env (`.env`, not committed): `SUPABASE_DB_URL`, `SUPABASE_S3_ENDPOINT`,
-`SUPABASE_S3_ACCESS_KEY`, `SUPABASE_S3_SECRET`, `EXTERNAL_DATA_BUCKET`, `ANTHROPIC_API_KEY`,
-`NOMINATIM_BASE_URL`. A `STORAGE_BACKEND=local|supabase` switch drives dev vs prod.
+## 6. Data model & lifecycle
 
-## 7. Legal / ToS posture
-Open-portal datasets are **CC-BY-4.0** — attribute the source. For news: pull **RSS/sitemaps
-only**, honor `robots.txt`, rate-limit politely, and persist **only extracted facts + the
-link** (event type, location, time, URL) — not article text or layout. Facts aren't
-copyrightable; reproductions are. Any source whose ToS forbids automated access is excluded.
+```sql
+CREATE EXTENSION IF NOT EXISTS postgis;
 
-## 8. Repository placement
-Self-contained package `external-data/` (monorepo, per README principles): `registry/`,
-`adapters/`, `core/`, `schema.py`, `cli.py`, `tests/`, `pyproject.toml`, `.env.example`,
-`README.md`. The §5.1 canonical record is the **shared contract** the Priority Engine
-depends on; it lives in `schema.py` and is documented here.
+-- Normalized signals: clustering input, rebuildable from staging Parquet.
+CREATE TABLE external_signals (
+    signal_id          TEXT PRIMARY KEY,           -- deterministic hash (idempotent)
+    source_id          TEXT NOT NULL,
+    risk_dimension     TEXT NOT NULL,              -- crash|violation|flooding|road_surface|crime
+    event_type         TEXT NOT NULL,
+    event_subtype      TEXT,
+    geom               geography(Point,4326) NOT NULL,
+    geom_quality       TEXT NOT NULL,              -- point|geocoded|block_centroid
+    occurred_at        TIMESTAMPTZ,
+    reported_at        TIMESTAMPTZ,
+    severity_weight    REAL NOT NULL DEFAULT 1,
+    geocode_confidence REAL,
+    attributes         JSONB NOT NULL DEFAULT '{}',
+    source_object_ref  TEXT,                        -- storage path to the raw/staging object
+    source_url         TEXT,
+    license            TEXT,
+    fetched_at         TIMESTAMPTZ,
+    ingested_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX external_signals_gix    ON external_signals USING GIST (geom);
+CREATE INDEX external_signals_dim_ix ON external_signals (risk_dimension);
 
-## 9. Testing
-- **Adapter units** with recorded CKAN/RSS fixtures (no live network in CI).
-- **Normalization golden tests** per source (native sample → expected canonical rows).
-- **Bbox / geom_quality** edge cases (out-of-CDMX SSC coords dropped; 911 → `block_centroid`).
-- **Idempotency**: re-run yields zero new `signal_id`s; loader upsert is stable.
-- **News geocoding**: fixture articles → expected points + confidence banding.
-- **Live smoke** (`-m live`, opt-in): one small real fetch per source kind.
+-- One generation per recompute.
+CREATE TABLE roi_runs (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    dimensions    TEXT[] NOT NULL,                 -- dims recomputed in this run
+    params        JSONB  NOT NULL,                 -- eps, minpoints, weights, half_life
+    signal_window TSTZRANGE,                       -- signal time window considered
+    started_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    completed_at  TIMESTAMPTZ,
+    roi_count     INT
+);
 
-## 10. Decisions & rejected alternatives
+-- The product. Logical supersession (never hard delete) → history + time-travel.
+CREATE TABLE rois (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    run_id           UUID NOT NULL REFERENCES roi_runs(id),
+    risk_dimension   TEXT NOT NULL,                -- app-toggleable layer
+    geom             geography(Polygon,4326) NOT NULL,
+    centroid         geography(Point,4326)   NOT NULL,
+    area_m2          REAL NOT NULL,
+    risk_score       REAL NOT NULL,
+    signal_count     INT  NOT NULL,
+    dominant_type    TEXT NOT NULL,
+    risk_breakdown   JSONB NOT NULL,               -- per type + co-located dimensions
+    occurred_from    TIMESTAMPTZ,
+    occurred_to      TIMESTAMPTZ,
+    recency_score    REAL,
+    description      TEXT NOT NULL,                 -- generated VLM/analysis context
+    contributing_signal_ids TEXT[] NOT NULL,        -- object references (signals)
+    source_object_refs      TEXT[] NOT NULL,        -- object references (storage handles)
+    valid_from       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    valid_to         TIMESTAMPTZ,                   -- set on supersession (NULL = current)
+    superseded_by_run_id UUID REFERENCES roi_runs(id),
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX rois_current_gix ON rois USING GIST (geom) WHERE valid_to IS NULL;
+CREATE INDEX rois_dim_ix      ON rois (risk_dimension)  WHERE valid_to IS NULL;
+
+CREATE VIEW current_rois AS SELECT * FROM rois WHERE valid_to IS NULL;
+```
+
+**Supersession (per recompute, one transaction):** insert the new run's ROIs, then retire the
+prior current ROIs **for the recomputed dimensions only** — so a single dimension can refresh
+without disturbing the others:
+
+```sql
+UPDATE rois
+   SET valid_to = now(), superseded_by_run_id = :new_run
+ WHERE valid_to IS NULL
+   AND run_id <> :new_run
+   AND risk_dimension = ANY(:recomputed_dims);
+```
+
+Time-travel ("ROIs as of date X") falls out of `valid_from/valid_to`, same as observations.
+
+## 7. Components
+- `registry/sources.yaml` — the §2 catalog as config: source → dimension, subset filter,
+  column map, severity, geom_quality, schedule, license.
+- `adapters/ckan_csv.py`, `adapters/news_geocode.py` — extract → raw + staging (as §previous
+  design; FGJ archive probe; RSS-first, ToS-respectful news).
+- `core/normalize.py` — staging → `external_signals` (bbox filter, weight, geom_quality).
+- `roi/engine.py` — DBSCAN clustering, polygon build, risk semantics, description generation.
+- `roi/persist.py` — `roi_runs`/`rois` insert + supersession transaction.
+- `db/migrations/*.sql` — the §6 DDL.
+- `cli.py` — `extract` (`--source|--all`), `roi compute` (`--dimension|--all`, `--eps`,
+  `--minpts`, `--half-life`), `roi current [--dimension]`, `status`.
+
+## 8. Production concerns
+- **Idempotency:** deterministic `signal_id`; per-source state (sha256 + CKAN `last_modified`)
+  skips unchanged extracts; ROI recompute is a clean generation (supersede, never duplicate).
+- **Scheduling:** registry cadence — `news` hourly/daily, `infracciones` weekly, batch-`crash`
+  monthly; ROI recompute triggered after any dimension's signals change. Scheduler-agnostic CLI.
+- **Resilience:** per-source isolation; retries w/ backoff; bad coords quarantined; out-of-CDMX
+  bbox drop (SSC has stray coords).
+- **Secrets (env):** `SUPABASE_DB_URL`, `SUPABASE_S3_ENDPOINT`, `SUPABASE_S3_ACCESS_KEY/SECRET`,
+  `EXTERNAL_DATA_BUCKET`, `ANTHROPIC_API_KEY`, `NOMINATIM_BASE_URL`; `STORAGE_BACKEND=local|supabase`.
+- **ToS:** open data is CC-BY-4.0 (attribute); news = RSS/sitemap + robots.txt, store extracted
+  facts + link only.
+
+## 9. Repository placement
+Self-contained monorepo package `external-data/`: `registry/`, `adapters/`, `core/`, `roi/`,
+`db/`, `schema.py`, `cli.py`, `tests/`, `pyproject.toml`, `.env.example`, `README.md`. The
+`rois` schema (§6) and `external_signals` are the **shared contracts** the Priority Engine and
+Latent Issue Detection depend on.
+
+## 10. Testing
+- Adapter units with recorded CKAN/RSS fixtures (no live network in CI).
+- Normalization golden tests (native sample → `external_signals` rows; bbox/geom_quality edges).
+- **ROI engine**: synthetic point clusters → expected polygons, risk_score, breakdown;
+  granularity (eps) behavior; singletons excluded (minpoints).
+- **Supersession**: recompute a dimension → old ROIs get `valid_to`, `current_rois` shows only
+  new; other dimensions untouched; time-travel query reconstructs a past generation.
+- **Idempotency**: re-extract = no new signals; re-run ROI = clean new generation.
+- Live smoke (`-m live`, opt-in): one real fetch + one real ROI compute end-to-end.
+
+## 11. Decisions & rejected alternatives
 | Decision | Why | Rejected |
 |---|---|---|
-| Registry-driven adapters | New source = config; mirrors observation-contract ethos | Hardcoded per-source scripts |
-| Raw + staging on object storage | Matches user's chosen sink; replayable; cloud/local parity | Normalized DB as primary sink |
-| Canonical record separate from `observations` | External signals are inputs, not detections | Reusing the observation schema |
-| `geom_quality` flag | Lets Priority Engine down-weight coarse/geocoded points | Treating all points as equal |
-| Geocoded tier first-class | Only path to fresher-than-2024 data (infracciones, news) | Batch-only (would ship ~18-mo-stale data) |
-| FGJ monthly-archive probe + CKAN fallback | Auto-picks up fresher FGJ than CKAN links | Trusting the CKAN resource URL alone |
-| Thin optional PostGIS loader | Supabase Postgres is in the stack; SQL spatial joins for free | Either no DB, or DB as mandatory sink |
-| Medallion-lite over Airflow/Dagster | ~10 sources, hackathon clock | Heavy orchestrator |
+| ROIs are the product; signals intermediate | Matches the stated end goal (inspection triggers) | Landing signals as the deliverable |
+| Per-dimension, tagged ROIs | App toggles dimensions (incl. crime) at query time | One blended ROI set |
+| Keep crime as its own dimension | User: "don't drop it; app decides usage" | Dropping the freshest direct-point source |
+| Drop C5-911 & RUSE | Block-centroid / 2020 — fail "granular" | Keeping coarse/old points |
+| `ST_ClusterDBSCAN` in PostGIS | Native, deterministic, granular, explainable | H3 (needs extension); KDE (fuzzy edges) |
+| Recency-decay weight + supersession | Two complementary time-sensitivity levers | Hard cutoff by date only |
+| Logical supersession by run/dimension | "Current, superseded on recompute" + history/time-travel | Hard delete / overwrite |
+| ROI stores object refs + description | The required analysis-context linkage | Geometry-only ROIs |
+| Storage: Supabase (Storage objects + PostGIS ROIs) | Uses the chosen stack; ROIs need a spatial DB | Files-only (can't satisfy "in a database") |
 
-## 11. Open items
-- Validate exact **RSS/sitemap URLs** per news outlet at build time (registry entries).
-- Confirm **Supabase Storage S3** credentials/endpoint format for the target project.
-- `infracciones` geocoding quality on `en_la_calle`+`entre_calle`+`y_calle` intersections
-  (expected high — they are named cross-streets).
-- Whether the FGJ monthly-archive pattern yields anything newer than 2025-01 (probe in prod;
-  the archive subdomain is not routable from the dev sandbox).
-- Per-source `event_type` taxonomy mapping table (finalize during build).
+## 12. Open items
+- Validate per-outlet **RSS/sitemap URLs** (registry entries) at build time.
+- Confirm Supabase **S3 endpoint/credentials** for the target project; whether `h3` ext is
+  available if we ever want the grid fallback.
+- Per-dimension `eps`/`minpoints` and the `severity`/`half_life` tables — tune on real data.
+- `infracciones`/`0311` subset filters (moving violations; baches vs agua) — finalize at build.
+- ROI ↔ recording linkage (for the VLM step) is consumed downstream by Latent Issue Detection;
+  this pipeline only guarantees ROI geometry + description + object refs.
