@@ -1,0 +1,139 @@
+# CDMX external risk-signal catalog. Verified against the CKAN API 2026-06-20.
+# Each source maps to exactly one risk dimension. See the design spec section 2.
+# NOTE: exact CSV header names for occurred_at/attributes must be confirmed per
+# resource via datastore_search?limit=1 at first live run; lat/long verified as
+# latitud/longitud on 2026-06-20 for SSC/FGJ/0311/SACMEX.
+sources:
+  - id: ssc_hechos_transito
+    kind: ckan_csv
+    risk_dimension: crash
+    event_type: traffic_crash
+    ckan_slug: hechos-de-transito-registrados-por-la-ssc-2024-serie-de-datos-ampliada-no-comparativa
+    resource_match: "(?i)^hechos de tr.nsito registrados por la ssc$"
+    geom_quality: point
+    license: CC-BY-4.0
+    schedule: monthly
+    column_map:
+      lon: longitud
+      lat: latitud
+      occurred_at: fecha_hechos
+      attributes: [tipo_evento, alcaldia, colonia]
+
+  - id: c5_incidentes_viales
+    kind: ckan_csv
+    risk_dimension: crash
+    event_type: traffic_incident
+    ckan_slug: incidentes-viales-c5
+    resource_match: "(?i)2022.*2024"
+    geom_quality: point
+    license: CC-BY-4.0
+    schedule: monthly
+    column_map:
+      lon: longitud
+      lat: latitud
+      occurred_at: fecha_creacion
+      event_subtype: incidente_c4
+      attributes: [alcaldia, dia_semana]
+
+  - id: fgj_carpetas
+    kind: ckan_csv
+    risk_dimension: crime
+    event_type: crime
+    ckan_slug: carpetas-de-investigacion-fgj-de-la-ciudad-de-mexico
+    resource_match: "(?i)acumulado"
+    geom_quality: point
+    license: CC-BY-4.0
+    schedule: monthly
+    column_map:
+      lon: longitud
+      lat: latitud
+      occurred_at: fecha_hecho
+      event_subtype: categoria_delito
+      attributes: [delito, alcaldia_hecho]
+
+  - id: fgj_victimas
+    kind: ckan_csv
+    risk_dimension: crime
+    event_type: crime_victim
+    ckan_slug: victimas-en-carpetas-de-investigacion-fgj
+    resource_match: "(?i)2024|acumulado"
+    geom_quality: point
+    license: CC-BY-4.0
+    schedule: monthly
+    column_map:
+      lon: longitud
+      lat: latitud
+      occurred_at: fecha_hecho
+      event_subtype: categoria_delito
+      attributes: [delito, sexo, edad]
+
+  - id: sacmex_encharcamientos
+    kind: ckan_csv
+    risk_dimension: flooding
+    event_type: water_report
+    ckan_slug: reportes-de-agua
+    resource_match: "(?i)2022.*2024"
+    geom_quality: point
+    license: CC-BY-4.0
+    schedule: monthly
+    subset:
+      tipo_reporte: [ENCHARCAMIENTO, ENCHARCAMIENTOS, INUNDACION]
+    column_map:
+      lon: longitud
+      lat: latitud
+      occurred_at: fecha
+      event_subtype: tipo_reporte
+      attributes: [colonia_catalogo]
+
+  - id: locatel_0311_agua
+    kind: ckan_csv
+    risk_dimension: flooding
+    event_type: citizen_report
+    ckan_slug: "0311"
+    resource_match: "(?i)2024"
+    geom_quality: point
+    license: CC-BY-4.0
+    subset:
+      tema: [AGUA]
+    column_map:
+      lon: longitud
+      lat: latitud
+      occurred_at: fecha_alta
+      event_subtype: tema
+      attributes: [colonia_catalogo]
+
+  - id: locatel_0311_baches
+    kind: ckan_csv
+    risk_dimension: road_surface
+    event_type: citizen_report
+    ckan_slug: "0311"
+    resource_match: "(?i)2024"
+    geom_quality: point
+    license: CC-BY-4.0
+    subset:
+      tema: [BACHE, BACHES, BACHEO]
+    column_map:
+      lon: longitud
+      lat: latitud
+      occurred_at: fecha_alta
+      event_subtype: tema
+      attributes: [colonia_catalogo]
+
+  - id: infracciones_ee
+    kind: news_geocode      # address-level -> geocode path (no lat/long in source)
+    risk_dimension: violation
+    event_type: traffic_violation
+    geom_quality: geocoded
+    license: CC-BY-4.0
+    feeds: []               # CKAN-address variant wired once real headers confirmed
+    schedule: weekly
+
+  - id: news_nota_roja
+    kind: news_geocode
+    risk_dimension: crash
+    event_type: traffic_incident_news
+    geom_quality: geocoded
+    schedule: daily
+    feeds:
+      - https://www.eluniversal.com.mx/rss/metropoli.xml
+      - https://www.jornada.com.mx/rss/capital.xml
