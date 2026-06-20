@@ -265,7 +265,37 @@ Latent Issue Detection depend on.
 | ROI stores object refs + description | The required analysis-context linkage | Geometry-only ROIs |
 | Storage: Supabase (Storage objects + PostGIS ROIs) | Uses the chosen stack; ROIs need a spatial DB | Files-only (can't satisfy "in a database") |
 
-## 12. Open items
+## 12. Integration with the application data model (parallel agent)
+
+A parallel agent is building the application's full Supabase data model on this branch
+(`docs/.../application-data-model-*`): 5 ownership schemas — `platform`, `vision`,
+`priority`, `geo`, `analysis` — with PostGIS in `extensions`, plus `pgmq`/`pg_cron`/`pg_net`,
+applied to the **remote project `joixzhdpnxqhnuscxsoy` via the Supabase MCP** (migrations
+`0001`–`0014`). **That model has no external-signal or ROI concept — this pipeline adds it.**
+This pipeline builds *on top of* that schema; it does not create or modify their tables.
+
+- **Schema placement (no new schema needed):** external-signal + ROI tables go in the
+  existing **`priority`** schema — `priority.external_signals`, `priority.roi_runs`,
+  `priority.rois`, view `priority.current_rois`. The README couples external signals to the
+  Priority Engine and ROIs to latent detection, so `priority` is the right home and **no
+  "missing schema" wait is required.**
+- **Storage:** add one private bucket **`external-data`** (raw + staging objects), following
+  the parallel agent's private-bucket + membership-scoped-policy pattern.
+- **Conventions matched (from their migrations):** `id uuid primary key default
+  gen_random_uuid()`; `text` + `check (... in (...))` enums; `timestamptz` with
+  `default now()`; PostGIS `geography`/`geometry` + GIST indexes; security-definer functions
+  set `search_path`; append-only / set-once triggers for immutable facts.
+- **Tooling constraint (important):** this agent has **no Supabase MCP and no local
+  CLI/Docker**. Migrations and SQL assertion tests are therefore **authored as files** under
+  `supabase/migrations/` (numbered **`0101+`** to avoid the reserved `0003`–`0014` band) and
+  `supabase/tests/`, to be **applied + verified by the DB-capable agent** via the Supabase
+  MCP. The Python pipeline runs independently with a **local-FS storage backend in dev** and
+  switches to Supabase Storage/Postgres once the migrations are applied.
+- **Writes:** the pipeline writes via the **service role** (bypasses RLS). Tenant-scoped
+  *read* policy for ROIs (geo-clip like observations) is deferred to coordinate with the DB
+  agent; ROIs are global risk data, clipped per tenant at read time downstream.
+
+## 13. Open items
 - Validate per-outlet **RSS/sitemap URLs** (registry entries) at build time.
 - Confirm Supabase **S3 endpoint/credentials** for the target project; whether `h3` ext is
   available if we ever want the grid fallback.
