@@ -12,4 +12,7 @@ begin
   -- one active boundary per tenant
   assert exists (select 1 from pg_indexes where schemaname='geo'
     and indexname='tenant_boundary_active_ux'), 'single-active-boundary index missing';
+  -- one active edition globally
+  assert exists (select 1 from pg_indexes where schemaname='geo'
+    and indexname='geo_editions_active_ux'), 'single-active-edition index missing';
 end $$;
