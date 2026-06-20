@@ -58,8 +58,9 @@ async def on_fetch(request, env):
         out = Headers.new()
         out.set("Content-Type", CONTENT_TYPE[bucket])
         out.set("Accept-Ranges", "bytes")
+        out.set("Cache-Control", "private, max-age=60")
         total = obj.size
-        last = offset + (obj.range.length if hasattr(obj.range, "length") else total - offset) - 1
+        last = max(offset, offset + (obj.range.length if hasattr(obj.range, "length") else total - offset) - 1)
         out.set("Content-Range", f"bytes {offset}-{last}/{total}")
         return Response.new(obj.body, to_js({"status": 206, "headers": out},
                                             dict_converter=Object.fromEntries))
