@@ -8,7 +8,6 @@ from pathlib import Path
 
 HERE = Path(__file__).parent
 
-
 def haversine(lat1, lon1, lat2, lon2):
     """Return distance in meters between two GPS coordinates."""
     R = 6_371_000
