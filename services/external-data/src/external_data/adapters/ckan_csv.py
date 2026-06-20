@@ -94,7 +94,7 @@ def extract(source: SourceConfig, ctx: ExtractContext) -> list[Signal]:
     stamp = ctx.now.strftime("%Y%m%dT%H%M%SZ")
     raw_path = f"raw/{source.id}/{stamp}/{url.rsplit('/', 1)[-1]}"
     ctx.store.write_bytes(raw_path, body)
-    rows = list(csv.DictReader(io.StringIO(body.decode("utf-8", errors="replace"))))
+    rows = list(csv.DictReader(io.StringIO(body.decode("utf-8-sig", errors="replace"))))
     ctx.store.write_text(
         f"raw/{source.id}/{stamp}/manifest.json",
         Manifest(

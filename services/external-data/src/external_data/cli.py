@@ -9,13 +9,36 @@ from external_data.adapters.base import ExtractContext
 from external_data.adapters import ckan_csv
 from external_data.roi.runner import compute_and_store
 from external_data.roi.store import InMemoryRoiStore, PgRoiStore
-from external_data.schema import RoiParams, Signal
+from external_data.schema import Roi, RoiParams, Signal
 
 app = typer.Typer(help="CDMX external-signal ROI pipeline")
 
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def rois_to_geojson(rois: list[Roi]) -> str:
+    """A FeatureCollection of ROI polygons with their risk semantics — the
+    consumable artifact for the map / Priority Engine when no DB is configured."""
+    from shapely import wkt as _wkt
+    from shapely.geometry import mapping
+    feats = []
+    for r in rois:
+        feats.append({
+            "type": "Feature",
+            "geometry": mapping(_wkt.loads(r.polygon_wkt)),
+            "properties": {
+                "risk_dimension": r.risk_dimension, "risk_score": r.risk_score,
+                "signal_count": r.signal_count, "dominant_type": r.dominant_type,
+                "risk_breakdown": r.risk_breakdown, "description": r.description,
+                "recency_score": r.recency_score,
+                "occurred_to": r.occurred_to.isoformat() if r.occurred_to else None,
+                "contributing_signal_ids": r.contributing_signal_ids,
+                "source_object_refs": r.source_object_refs,
+            },
+        })
+    return json.dumps({"type": "FeatureCollection", "features": feats})
 
 
 @app.command()
@@ -62,6 +85,9 @@ def roi_compute(dimension: str = typer.Option(None), all: bool = typer.Option(Fa
     roi_store = PgRoiStore(settings.db_url) if settings.db_url else InMemoryRoiStore()
     run = compute_and_store(by_dim, roi_store, RoiParams(), _now())
     typer.echo(f"run {run.run_id}: {run.roi_count} ROIs across {run.dimensions}")
+    if isinstance(roi_store, InMemoryRoiStore):
+        out = store.write_text("staging/rois/current.geojson", rois_to_geojson(roi_store.current()))
+        typer.echo(f"wrote ROI GeoJSON -> {out}")
 
 
 if __name__ == "__main__":

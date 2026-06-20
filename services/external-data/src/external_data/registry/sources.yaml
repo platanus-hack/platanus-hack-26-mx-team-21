@@ -13,11 +13,17 @@ sources:
     geom_quality: point
     license: CC-BY-4.0
     schedule: monthly
+    # column names verified against the live CSV header 2026-06-20.
+    severity:                       # weight vulnerable-road-user events higher
+      ATROPELLADO: 2.0
+      MOTOCICLISTA: 1.5
+      CICLISTA: 1.5
     column_map:
       lon: longitud
       lat: latitud
-      occurred_at: fecha_hechos
-      attributes: [tipo_evento, alcaldia, colonia]
+      occurred_at: fecha_evento
+      event_subtype: tipo_evento
+      attributes: [alcaldia, colonia, clasificacion_de_la_vialidad, tipo_de_interseccion]
 
   - id: c5_incidentes_viales
     kind: ckan_csv

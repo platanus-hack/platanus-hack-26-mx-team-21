@@ -22,3 +22,10 @@ def test_recency_weight_halves_at_half_life():
     assert recency_weight(now, 365, now) == 1.0
     assert abs(recency_weight(old, 365, now) - 0.5) < 1e-6
     assert recency_weight(None, 365, now) == 0.5
+
+
+def test_recency_weight_handles_naive_datetime():
+    # real CSV dates parse as tz-naive; must not raise against a tz-aware now
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    naive_old = datetime(2025, 1, 1)  # no tzinfo
+    assert abs(recency_weight(naive_old, 365, now) - 0.5) < 1e-6

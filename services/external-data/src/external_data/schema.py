@@ -74,8 +74,10 @@ class Roi(BaseModel):
 
 
 class RoiParams(BaseModel):
-    eps_m: float = 100.0
-    min_points: int = 5
+    # eps/min_points tuned on real CDMX crash data (30k pts) for GRANULAR ROIs:
+    # ~intersection/half-block scale (median ~3,000 m2), not city-spanning blobs.
+    eps_m: float = 40.0
+    min_points: int = 6
     buffer_m: float = 15.0
     half_life_days: float = 365.0
     per_dimension: dict[str, dict] = Field(default_factory=dict)
