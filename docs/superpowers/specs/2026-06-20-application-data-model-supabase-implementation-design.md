@@ -66,23 +66,38 @@ must close these seams, all created by the new direction:
 
 ## 3. Platform Baseline
 
+### 3.0 Verified live-project baseline (2026-06-20)
+
+Checked against project `joixzhdpnxqhnuscxsoy` via the Supabase MCP:
+
+- **Greenfield:** no tables and no migrations — this spec defines the full schema.
+- **Extensions:** all required extensions are *available* but not yet installed
+  (`postgis` 3.3.7, `pgmq` 1.5.1, `pg_cron` 1.6.4, `pg_net` 0.20.3). `pgcrypto`,
+  `uuid-ossp`, and `pg_stat_statements` are already installed in the **`extensions`**
+  schema — the convention this spec follows.
+- **Storage:** global `fileSizeLimit` is **50 MB** (`52428800`); S3 protocol and image
+  transformation are enabled. The 50 MB cap must be raised for sweep video (§8, §13.4).
+
 ### 3.1 Extensions
 
-| Extension | Purpose |
-|---|---|
-| `postgis` | Geography/geometry types, spatial indexes, tile generation |
-| `pgcrypto` | `gen_random_uuid()` |
-| `pgmq` | Durable in-database message queues for async work |
-| `pg_cron` | Scheduled outbox drains, cache rebuilds, retries |
-| `pg_net` | Optional async HTTP to wake the worker server |
+| Extension | Install schema | Purpose |
+|---|---|---|
+| `postgis` | `extensions` | Geography/geometry types, spatial indexes, tile generation |
+| `pgmq` | `pgmq` (own) | Durable in-database message queues for async work |
+| `pg_cron` | `cron` (own) | Scheduled outbox drains, cache rebuilds, retries |
+| `pg_net` | `net` (own) | Optional async HTTP to wake the worker server |
 
 ```sql
-create extension if not exists postgis;
-create extension if not exists pgcrypto;
-create extension if not exists pgmq;
-create extension if not exists pg_cron;
-create extension if not exists pg_net;
+-- gen_random_uuid() is Postgres core (pg_catalog); pgcrypto/uuid-ossp already present.
+create extension if not exists postgis with schema extensions;
+create extension if not exists pgmq;     -- manages its own `pgmq` schema
+create extension if not exists pg_cron;  -- manages its own `cron` schema
+create extension if not exists pg_net;   -- exposes the `net` schema
 ```
+
+Because PostGIS lives in `extensions`, functions that call PostGIS set
+`search_path = extensions, public` so `ST_*` and the `geometry`/`geography` types
+resolve (see §9.4).
 
 ### 3.2 Schemas (= logical ownership domains)
 
@@ -389,16 +404,26 @@ All buckets are **private**. Access is granted per §9.4.
 | `observation-thumbnails` | Per-observation previews | `observations/{observation_id}/thumb.jpg` |
 | `tenant-tiles` | Precomputed geo-clipped tiles/layers (§5.3) | `{tenant_id}/{boundary_version_id}/{data_version}/...` |
 
+Bucket definitions are infrastructure-as-code in a migration (per-bucket size limit and
+MIME allow-list inline):
+
 ```sql
-insert into storage.buckets (id, name, public) values
-    ('sweep-video', 'sweep-video', false),
-    ('observation-thumbnails', 'observation-thumbnails', false),
-    ('tenant-tiles', 'tenant-tiles', false)
-on conflict (id) do nothing;
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values
+    ('sweep-video', 'sweep-video', false, 5368709120,                 -- 5 GiB
+        array['video/mp4','video/webm','application/x-mpegURL']),
+    ('observation-thumbnails', 'observation-thumbnails', false, 5242880,  -- 5 MiB
+        array['image/jpeg','image/webp','image/png']),
+    ('tenant-tiles', 'tenant-tiles', false, 52428800,                 -- 50 MiB
+        array['application/x-protobuf','application/octet-stream','application/json','application/gzip'])
+on conflict (id) do update
+    set file_size_limit = excluded.file_size_limit,
+        allowed_mime_types = excluded.allowed_mime_types;
 ```
 
-Large video uses **resumable (TUS) uploads**; the project's storage upload size limit
-must be raised accordingly (validated against the live project before migration).
+**Required dependency:** a bucket's `file_size_limit` cannot exceed the **global**
+storage limit, which is **50 MB on this project**. The `sweep-video` 5 GiB limit only
+takes effect after the global limit is raised (§13.4). Large video uses **resumable
+(TUS) uploads**.
 
 ---
 
@@ -494,10 +519,10 @@ create policy tenant_tiles_read on storage.objects
   The API calls an authz RPC, then mints a **service-role signed URL** only on success:
 
 ```sql
--- search_path includes the schema where PostGIS is installed (public by §3.1);
--- confirm against the live project if PostGIS lives in `extensions`.
+-- PostGIS is installed in `extensions` (§3.1), so ST_Contains and the geometry type
+-- resolve via that schema; app tables stay schema-qualified.
 create or replace function platform.can_view_observation(p_observation_id uuid)
-returns boolean language sql stable security definer set search_path = public as $$
+returns boolean language sql stable security definer set search_path = extensions, public as $$
     select platform.is_member(platform.active_tenant_id(), 'viewer')
        and exists (
             select 1
@@ -629,11 +654,103 @@ Supabase migrations under `supabase/migrations/`, applied in dependency order:
 11. Read-model cache: `read_model_state`, `tenant_visible_observations`,
     `tenant_tile_sets`, and materialization wiring.
 
-Each stage preserves domain ownership and exposes stable identifiers to the next.
+Each stage is one or more files under `supabase/migrations/` (§13.1), authored with
+`supabase migration new` and applied with `supabase db reset` (local) / `supabase db push`
+(remote). Each stage preserves domain ownership and exposes stable identifiers to the next.
 
 ---
 
-## 13. Testing & Acceptance (Supabase-specific)
+## 13. Monorepo Layout, Infrastructure-as-Code & Setup
+
+The database and object storage are **shared infrastructure** (per the system
+architecture: vision, priority, geo, analysis, and the map client all depend on them).
+They therefore live in **one** place at the repo root, managed entirely through the
+**Supabase CLI** — the existing, reproducible mechanism for migrations and IaC. Nothing
+in this design requires click-ops that isn't also captured as code.
+
+### 13.1 Placement in the monorepo
+
+```
+/ (repo root)
+├─ supabase/                     # single source of truth for shared DB + Storage (IaC)
+│  ├─ config.toml                # declarative project + local-stack config
+│  ├─ migrations/                # ordered SQL migrations (§12), one+ file per stage
+│  │   ├─ 0001_extensions_schemas_auth.sql
+│  │   ├─ 0002_platform_tenants.sql
+│  │   └─ ...                     # through 0011_read_model_cache.sql
+│  └─ seed.sql                   # replicable seed: type catalog, dev tenant, fixtures
+├─ services/
+│  └─ worker/                    # custom worker server (service_role): queues, signed URLs, materialization
+│     └─ .env.example            # SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (real .env not committed)
+├─ packages/
+│  └─ db-types/                  # generated TypeScript types (supabase gen types)
+└─ ...                           # other modules (vision, priority, map client) depend on the above
+```
+
+Module application code stays in its own package; **schema ownership** (§3.2) is enforced
+inside the one database, not by splitting the migrations across packages — that keeps the
+dependency-ordered migration history (§12) linear and replayable.
+
+### 13.2 IaC mechanism
+
+Everything is code and committed:
+
+- `supabase/migrations/*.sql` — schema, RLS, triggers, Storage buckets, `pgmq` queues,
+  and `pg_cron` jobs (all the DDL in this spec).
+- `supabase/config.toml` — Postgres major version, `[storage] file_size_limit`, and
+  `[auth]` settings; gives local/remote parity.
+- `supabase/seed.sql` — deterministic seed data.
+
+`supabase db reset` rebuilds the **entire** database from `migrations/` + `seed.sql`, so
+any contributor reproduces an identical environment; `supabase db push` applies the same
+migrations to the linked remote project. No schema change is ever made by hand.
+
+### 13.3 Setup commands
+
+```bash
+# 1. Install the CLI (existing mechanism)
+brew install supabase/tap/supabase        # or run any command below as: npx supabase <cmd>
+
+# 2. From repo root, link to the project
+supabase link --project-ref joixzhdpnxqhnuscxsoy
+
+# 3. Local dev: start the full stack, then build the DB from code
+supabase start
+supabase db reset                          # applies migrations/ + seed.sql deterministically
+
+# 4. Author a new migration during development
+supabase migration new <description>       # creates supabase/migrations/<ts>_<description>.sql
+
+# 5. Apply migrations to the linked remote
+supabase db push
+
+# 6. Regenerate typed DB client for app modules
+supabase gen types typescript --linked > packages/db-types/database.ts
+```
+
+### 13.4 Required project settings (one-time, captured as config)
+
+- **Raise the global Storage file-size limit.** It is **50 MB** today; sweep video needs
+  more (the `sweep-video` bucket requests 5 GiB, §8). Set `[storage] file_size_limit`
+  in `config.toml` for local parity and apply the same value to the remote project
+  (`supabase config push` where supported, otherwise Storage settings / management API;
+  the Supabase MCP `update_storage_config` can apply it on request). Per-bucket limits
+  cannot exceed this global value.
+- **Auth providers** are configured under `[auth]` in `config.toml`. Tenant context is
+  carried by a per-request GUC (`app.tenant_id`, §9.2), so **no custom JWT access-token
+  hook is required** — one less manual step.
+- **Worker credentials:** `services/worker` reads `SUPABASE_URL` and
+  `SUPABASE_SERVICE_ROLE_KEY` from its environment (documented in `.env.example`, real
+  values uncommitted). The service-role key bypasses RLS and must never reach a client.
+
+### 13.5 Seed data (`seed.sql`)
+
+For a working local map after `supabase db reset`: the `observation_types` catalog with
+their attribute definitions, one active `priority_model`, and a dev tenant with a small
+INEGI edition fixture and an active boundary. This makes the geo-clip cache and inspect
+flow exercisable locally without the upstream capture/vision pipeline.
+
+## 14. Testing & Acceptance (Supabase-specific)
 
 In addition to the logical model's acceptance scenarios:
 
@@ -657,7 +774,7 @@ In addition to the logical model's acceptance scenarios:
 
 ---
 
-## 14. Deferred / Out of Scope
+## 15. Deferred / Out of Scope
 
 - Capture/ingest implementation, video transcoding/segmentation (HLS), and thumbnail
   rendering internals (only their schema hooks and statuses are here).
@@ -665,6 +782,6 @@ In addition to the logical model's acceptance scenarios:
 - Optimization, costing, routing, and clustering algorithms (provider-owned).
 - Tile rendering/styling and the map client.
 - Natural-language drafting model and prompt design.
-- Exact Supabase project settings (upload limits, JWT custom-claim hook) — to be
-  validated/applied against the live project after spec review.
+- Applying the global Storage upload-limit change to the remote project (the value and
+  mechanism are specified in §13.4; no JWT custom-claim hook is needed).
 - Historical map playback UI (records retained, UI deferred).
