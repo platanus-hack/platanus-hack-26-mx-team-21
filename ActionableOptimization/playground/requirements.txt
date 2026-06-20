@@ -1,0 +1,9 @@
+folium
+pandas
+numpy
+scipy
+geopandas
+osmnx
+requests
+python-dotenv
+shapely
