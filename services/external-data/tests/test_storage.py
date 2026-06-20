@@ -1,3 +1,5 @@
+import pytest
+
 from external_data.config import Settings
 from external_data.core.storage import make_store
 
@@ -20,3 +22,9 @@ def test_r2_store_is_s3_rooted_at_bucket():
     ))
     assert s.root == "external-data"
     assert "s3" in s.fs.protocol  # s3fs filesystem, no network on construction
+
+
+def test_r2_store_requires_endpoint():
+    # A missing R2 endpoint would silently target AWS S3 — fail loud instead.
+    with pytest.raises(ValueError, match="r2_s3_endpoint"):
+        make_store(Settings(storage_backend="r2", r2_access_key="k", r2_secret="x"))

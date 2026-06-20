@@ -40,6 +40,9 @@ def make_store(settings: Settings) -> ObjectStore:
         )
         return ObjectStore(fs, settings.external_data_bucket)
     if settings.storage_backend == "r2":
+        if not settings.r2_s3_endpoint:
+            # Without an explicit R2 endpoint, fsspec would silently target AWS S3.
+            raise ValueError("r2_s3_endpoint must be set when storage_backend='r2'")
         fs = fsspec.filesystem(
             "s3",
             key=settings.r2_access_key,
