@@ -47,3 +47,25 @@ carpetas+víctimas), `flooding` (SACMEX, 0311-agua), `road_surface` (0311-baches
 - Column names verified live for **SSC only**; FGJ/C5/0311/SACMEX/infracciones headers must
   be confirmed against each live CSV before their first real extract.
 - `external-data` bucket created but empty (no raw/staging uploaded yet).
+
+## Container deployment (R2 + Cron)
+
+Deploy the containerized pipeline to Cloudflare Containers with a daily Cron trigger:
+
+```bash
+# From services/external-data/cron/
+npx wrangler deploy
+
+# Set R2 + DB credentials (one-time):
+npx wrangler secret put R2_S3_ENDPOINT
+npx wrangler secret put R2_ACCESS_KEY
+npx wrangler secret put R2_SECRET
+npx wrangler secret put DB_URL
+npx wrangler secret put EXTERNAL_DATA_BUCKET  # e.g. "external-data"
+```
+
+The Dockerfile defines the image: `external-data:r2` with `STORAGE_BACKEND=r2`, entrypoint `external-data` CLI.
+The `wrangler.toml` in `cron/` configures the Cron Worker (`0 6 * * *` = daily 06:00 UTC) and Durable Object container.
+
+On each cron trigger, the container runs: `external-data extract && external-data roi-compute --export && external-data load`.
+All raw/staging/ROI output writes to R2 via the s3fs backend.
