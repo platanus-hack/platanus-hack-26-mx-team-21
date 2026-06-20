@@ -1,0 +1,4 @@
+id_evento,latitud,longitud,fecha_hechos,tipo_evento,alcaldia,colonia
+E1,19.4326,-99.1332,2024-05-01,colision,Cuauhtemoc,Centro
+E2,19.3600,-99.1800,2024-06-15,atropello,Benito Juarez,Narvarte
+E3,25.6700,-100.3100,2024-06-20,colision,Monterrey,Centro
