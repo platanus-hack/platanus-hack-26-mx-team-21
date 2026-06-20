@@ -1,0 +1,20 @@
+name = "r2-access-broker"
+main = "src/entry.py"
+compatibility_date = "2025-06-01"
+compatibility_flags = ["python_workers"]
+
+[[r2_buckets]]
+binding = "SWEEP_VIDEO"
+bucket_name = "sweep-video"
+
+[[r2_buckets]]
+binding = "OBSERVATION_THUMBNAILS"
+bucket_name = "observation-thumbnails"
+
+[[r2_buckets]]
+binding = "TENANT_TILES"
+bucket_name = "tenant-tiles"
+
+[vars]
+SUPABASE_URL = "https://joixzhdpnxqhnuscxsoy.supabase.co"
+# SUPABASE_ANON_KEY is a secret: npx wrangler secret put SUPABASE_ANON_KEY
