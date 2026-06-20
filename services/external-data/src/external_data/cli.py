@@ -90,5 +90,26 @@ def roi_compute(dimension: str = typer.Option(None), all: bool = typer.Option(Fa
         typer.echo(f"wrote ROI GeoJSON -> {out}")
 
 
+@app.command(name="load-db")
+def load_db():
+    """Upsert staged signals into priority.external_signals (requires DB_URL)."""
+    settings = get_settings()
+    if not settings.db_url:
+        typer.echo("DB_URL not set; cannot load to Postgres", err=True)
+        raise typer.Exit(1)
+    from external_data.core.signal_store import PgSignalStore
+    store = make_store(settings)
+    sig_store = PgSignalStore(settings.db_url)
+    total = 0
+    for s in load_registry():
+        path = f"staging/{s.id}/signals.jsonl"
+        if not store.exists(path):
+            continue
+        sigs = [Signal(**json.loads(line)) for line in store.read_text(path).splitlines() if line.strip()]
+        total += sig_store.upsert(sigs)
+        typer.echo(f"{s.id}: upserted {len(sigs)}")
+    typer.echo(f"total upserted into priority.external_signals: {total}")
+
+
 if __name__ == "__main__":
     app()

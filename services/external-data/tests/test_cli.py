@@ -16,6 +16,15 @@ def test_help():
     assert runner.invoke(app, ["--help"]).exit_code == 0
 
 
+def test_load_db_requires_db_url(monkeypatch):
+    from external_data.config import get_settings
+    monkeypatch.delenv("DB_URL", raising=False)
+    get_settings.cache_clear()
+    res = runner.invoke(app, ["load-db"])
+    assert res.exit_code == 1
+    get_settings.cache_clear()
+
+
 def test_roi_compute_writes_geojson(tmp_path, monkeypatch):
     from external_data.config import get_settings, Settings
     from external_data.core.storage import make_store
