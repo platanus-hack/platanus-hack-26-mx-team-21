@@ -1,0 +1,4 @@
+fecha_evento,hora_evento,tipo_evento,folio,latitud,longitud,alcaldia,colonia,clasificacion_de_la_vialidad,tipo_de_interseccion
+2024-05-01,08:30,COLISION,F1,19.4326,-99.1332,Cuauhtemoc,Centro,PRIMARIA,CRUCERO
+2024-06-15,21:10,ATROPELLADO,F2,19.3600,-99.1800,Benito Juarez,Narvarte,SECUNDARIA,CRUCERO
+2024-06-20,12:00,COLISION,F3,25.6700,-100.3100,Monterrey,Centro,PRIMARIA,CRUCERO
