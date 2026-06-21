@@ -1,17 +1,19 @@
 import { memo, useEffect, useRef } from "react";
 import L from "leaflet";
-import type { Observation, PlanResult, Roi } from "../lib/types";
+import type { Observation, PlanResult, Roi, SweepRoute } from "../lib/types";
 import { volumeColor } from "../lib/geo";
 import { riskLabel } from "../lib/analysis";
 
 interface Props {
   observations: Observation[];
+  thumbUrls: Record<string, string>; // observation id → blob: URL of its citizen-report photo
   boundary: unknown | null;
   showPins: boolean;
   showRois: boolean;
   activeTypes: Record<string, boolean>;
   plan: PlanResult | null; // non-null while previewing a generated plan
   rois: Roi[];
+  sweepRoute: SweepRoute | null; // non-null while viewing a sweep's coverage ("recorrido")
   selectedId: string | null;
   accent: string;
   panTarget: { lat: number; lng: number; n: number } | null;
@@ -28,6 +30,7 @@ export const MapCanvas = memo(function MapCanvas(props: Props) {
   const rendererRef = useRef<L.Canvas | null>(null);
   const groups = useRef<Record<string, L.LayerGroup>>({});
   const fitKeyRef = useRef<string>("");
+  const sweepFitRef = useRef<string>("");
   const onSelectRef = useRef(props.onSelect);
   onSelectRef.current = props.onSelect;
   const showRoisRef = useRef(props.showRois);
@@ -65,7 +68,9 @@ export const MapCanvas = memo(function MapCanvas(props: Props) {
       rois: L.layerGroup().addTo(map),
       roiLabels: L.layerGroup(), // added/removed by zoom, see syncRoiLabels
       pins: L.layerGroup().addTo(map),
+      photos: L.layerGroup().addTo(map), // citizen-report thumbnail markers (WhatsApp photos)
       plan: L.layerGroup().addTo(map),
+      sweep: L.layerGroup().addTo(map),
     };
     map.on("zoomend", syncRoiLabels);
     setTimeout(() => map.invalidateSize(false), 0);
@@ -152,6 +157,7 @@ export const MapCanvas = memo(function MapCanvas(props: Props) {
     const maxVol = vols.length ? Math.max(...vols) : 1;
     for (const o of props.observations) {
       if (!props.activeTypes[o.slug]) continue;
+      if (props.thumbUrls[o.id]) continue; // shown as a photo marker instead of a dot
       if (o.volume == null) {
         // pending / no volume → neutral dashed (same size as the rest)
         L.circleMarker([o.lat, o.lng], {
@@ -180,7 +186,32 @@ export const MapCanvas = memo(function MapCanvas(props: Props) {
           .addTo(g);
       }
     }
-  }, [props.observations, props.showPins, props.activeTypes]);
+  }, [props.observations, props.showPins, props.activeTypes, props.thumbUrls]);
+
+  // ---- citizen-report photo markers (WhatsApp) ----------------------------
+  // Observations carrying a thumbnail (today: WhatsApp citizen reports) render as their
+  // actual photo instead of a dot, with a white frame + accent ring so they read as
+  // citizen-sourced. Same toggles as the pins (showPins + per-type). Clicking selects.
+  useEffect(() => {
+    const g = groups.current.photos;
+    if (!g) return;
+    g.clearLayers();
+    if (!props.showPins) return;
+    for (const o of props.observations) {
+      if (!props.activeTypes[o.slug]) continue;
+      const url = props.thumbUrls[o.id];
+      if (!url) continue;
+      L.marker([o.lat, o.lng], {
+        icon: L.divIcon({
+          className: "",
+          html: `<div style="width:40px;height:40px;border-radius:11px;overflow:hidden;background:#e7ebf1;border:2.5px solid #fff;box-shadow:0 0 0 2px ${props.accent},0 4px 11px -3px rgba(20,30,50,.5);transform:translate(-50%,-50%);cursor:pointer;"><img src="${url}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block;" /></div>`,
+          iconSize: [0, 0],
+        }),
+      })
+        .on("click", () => onSelectRef.current(o.id))
+        .addTo(g);
+    }
+  }, [props.observations, props.showPins, props.activeTypes, props.thumbUrls, props.accent]);
 
   // ---- plan preview overlay (crew clusters + ranked markers) --------------
   // Crews (cuadrillas) are a DISPATCH concept: each gets a categorical color so they
@@ -244,6 +275,63 @@ export const MapCanvas = memo(function MapCanvas(props: Props) {
       }).addTo(g);
     }
   }, [props.plan, props.accent]);
+
+  // ---- sweep coverage overlay ("Ver recorrido") --------------------------
+  // The covered footprint of one inspection sweep, drawn in the tenant accent so it
+  // reads as distinct from the red risk-ROIs and the categorical plan crews. Plus an
+  // accent ring on the originating observation. Nothing renders without a sweep.
+  useEffect(() => {
+    const g = groups.current.sweep;
+    if (!g) return;
+    g.clearLayers();
+    const sr = props.sweepRoute;
+    if (!sr) return;
+    try {
+      L.geoJSON({ type: "Feature", geometry: sr.coverage, properties: {} } as never, {
+        interactive: false,
+        style: {
+          color: props.accent,
+          weight: 2,
+          opacity: 0.9,
+          dashArray: "6 5",
+          fill: true,
+          fillColor: props.accent,
+          fillOpacity: 0.08,
+        },
+      }).addTo(g);
+    } catch {
+      /* ignore malformed geometry */
+    }
+    L.marker([sr.originLat, sr.originLng], {
+      interactive: false,
+      icon: L.divIcon({
+        className: "",
+        html: `<div style="width:18px;height:18px;border-radius:50%;border:3px solid ${props.accent};background:#fff;box-shadow:0 0 0 4px ${props.accent}33;transform:translate(-50%,-50%);"></div>`,
+        iconSize: [0, 0],
+      }),
+    }).addTo(g);
+  }, [props.sweepRoute, props.accent]);
+
+  // ---- fit to the sweep coverage (panel-aware padding) --------------------
+  useEffect(() => {
+    const map = mapRef.current;
+    const sr = props.sweepRoute;
+    if (!map || !sr) return;
+    const key = `${sr.sweep}_${sr.originLat}_${sr.originLng}`;
+    if (key === sweepFitRef.current) return;
+    sweepFitRef.current = key;
+    try {
+      const layer = L.geoJSON({ type: "Feature", geometry: sr.coverage, properties: {} } as never);
+      map.fitBounds(layer.getBounds(), {
+        maxZoom: 14,
+        animate: true,
+        paddingTopLeft: [80, 80],
+        paddingBottomRight: [360, 220],
+      });
+    } catch {
+      /* ignore */
+    }
+  }, [props.sweepRoute]);
 
   // ---- fit to the plan (panel-aware padding) ------------------------------
   // NOTE: intentionally NOT keyed on dockOpen. Refitting fires a synchronous full-map

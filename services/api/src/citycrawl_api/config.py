@@ -21,7 +21,6 @@ class Settings(BaseSettings):
     operator_api_key: str | None = None
 
     # --- Citizen-report confirmation gate (non-public inference server) -------
-    inference_confirmation_enabled: bool = False
     inference_thinking_mode: str = "flash"     # 'flash' | 'thinking'
     inference_timeout_s: float = 60.0
     inference_poll_interval_s: float = 1.0

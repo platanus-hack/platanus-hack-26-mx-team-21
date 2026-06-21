@@ -76,7 +76,9 @@ export type Database = {
           lat: number
           lng: number
           slug: string
+          source: string
           state: string
+          thumb_path: string
           volume: number
           weight: number
           zone: string
@@ -115,6 +117,19 @@ export type Database = {
           is_latent: boolean
           label: string
           slug: string
+        }[]
+      }
+      app_sweep_route: {
+        Args: { p_observation_id: string }
+        Returns: {
+          area_km2: number
+          coverage_geojson: Json
+          ended_at: string
+          obs_count: number
+          origin_lat: number
+          origin_lng: number
+          started_at: string
+          sweep: string
         }[]
       }
       app_tenant_boundary: { Args: never; Returns: Json }

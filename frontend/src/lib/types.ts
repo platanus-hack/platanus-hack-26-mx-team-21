@@ -67,6 +67,8 @@ export interface Observation {
   zone: string | null;
   districtCve: string | null;
   districtName: string | null;
+  source: string | null; // detector/provenance — "whatsapp-citizen" for citizen reports
+  thumbPath: string | null; // R2 path of the ready thumbnail (citizen photo), else null
 }
 
 export interface ObservationDetail {
@@ -90,6 +92,20 @@ export interface ObservationDetail {
   detector: string;
   districtName: string | null;
   zone: string | null;
+}
+
+// The coverage footprint + metadata for one inspection sweep ("recorrido"), resolved
+// from a single observation. `coverage` is a GeoJSON geometry (the area the sweep
+// covered — not a GPS track); the rest frames the sweep-view overlay and banner.
+export interface SweepRoute {
+  sweep: string;
+  startedAt: string;
+  endedAt: string;
+  obsCount: number;
+  areaKm2: number;
+  coverage: unknown;
+  originLat: number;
+  originLng: number;
 }
 
 export interface Roi {

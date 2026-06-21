@@ -6,9 +6,11 @@ import { AnalysisDock } from "../components/AnalysisDock";
 import { HistoryPopover, type PlanHistoryItem } from "../components/HistoryPopover";
 import { ObservationCard } from "../components/ObservationCard";
 import { Button } from "@/components/ui/button";
+import { Panel } from "@/components/ui/panel";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "../lib/auth";
 import * as api from "../lib/api";
+import { fetchObjectUrl, THUMBNAIL_BUCKET } from "../lib/objects";
 import { optimizePlan, parseDraft } from "../lib/citycrawlApi";
 import {
   ACTIVE_ISSUE_TYPES,
@@ -27,6 +29,7 @@ import type {
   RegionOption,
   Roi,
   RunSummary,
+  SweepRoute,
   TypeCount,
 } from "../lib/types";
 
@@ -95,6 +98,9 @@ export function MapPage() {
   const [accent, setAccent] = useState("#2f64e6");
   const [types, setTypes] = useState<TypeCount[]>([]);
   const [observations, setObservations] = useState<Observation[]>([]);
+  // blob: URLs for citizen-report thumbnails (WhatsApp photos), keyed by observation id.
+  // Streamed from the R2 broker once observations load; revoked on unmount.
+  const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({});
   const [rois, setRois] = useState<Roi[]>([]);
   const [boundary, setBoundary] = useState<unknown | null>(null);
   const [liveRuns, setLiveRuns] = useState<RunSummary[]>([]);
@@ -134,6 +140,10 @@ export function MapPage() {
   const [detail, setDetail] = useState<ObservationDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [panTarget, setPanTarget] = useState<{ lat: number; lng: number; n: number } | null>(null);
+
+  // ---- sweep ("recorrido") view -------------------------------------------
+  const [sweepRoute, setSweepRoute] = useState<SweepRoute | null>(null);
+  const [sweepLoading, setSweepLoading] = useState(false);
 
   // The layers panel must clear whatever sits bottom-left: the dock/launcher
   // (always) and the observation card (only while one is open). Both are
@@ -181,6 +191,40 @@ export function MapPage() {
       alive = false;
     };
   }, []);
+
+  // ---- citizen-report thumbnails ------------------------------------------
+  // Each observation with a thumb_path (today: WhatsApp citizen reports) gets its photo
+  // streamed from the broker and shown as the map marker. Fetched once per id; the loaded
+  // set is tracked in a ref so this effect never re-fetches, and all blob: URLs are revoked
+  // when the page unmounts to avoid leaks.
+  const loadedThumbs = useRef<Set<string>>(new Set());
+  const thumbUrlsRef = useRef<Record<string, string>>({});
+  thumbUrlsRef.current = thumbUrls;
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      for (const o of observations) {
+        if (!o.thumbPath || loadedThumbs.current.has(o.id)) continue;
+        loadedThumbs.current.add(o.id);
+        const url = await fetchObjectUrl(THUMBNAIL_BUCKET, o.thumbPath);
+        if (!alive) {
+          if (url) URL.revokeObjectURL(url);
+          return;
+        }
+        if (url) setThumbUrls((m) => ({ ...m, [o.id]: url }));
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [observations]);
+  // Revoke every loaded thumbnail URL when the page unmounts.
+  useEffect(
+    () => () => {
+      for (const url of Object.values(thumbUrlsRef.current)) URL.revokeObjectURL(url);
+    },
+    [],
+  );
 
   // ---- derived ------------------------------------------------------------
   const typeLabels = useMemo(
@@ -299,6 +343,17 @@ export function MapPage() {
       .finally(() => setDetailLoading(false));
   }, []);
 
+  // Resolve and show the inspection sweep behind an observation; fetch is fire-and-
+  // forget with a loading flag so the banner can render immediately.
+  const onViewSweep = useCallback((obsId: string) => {
+    setSweepLoading(true);
+    api
+      .getSweepRoute(obsId)
+      .then((sr) => setSweepRoute(sr))
+      .catch(() => setSweepRoute(null))
+      .finally(() => setSweepLoading(false));
+  }, []);
+
   const onToggleType = (slug: string) =>
     setActiveTypes((at) => ({ ...at, [slug]: !at[slug] }));
 
@@ -379,17 +434,31 @@ export function MapPage() {
     <div className="fixed inset-0 overflow-hidden bg-background text-foreground">
       <MapCanvas
         observations={observations}
+        thumbUrls={thumbUrls}
         boundary={boundary}
         showPins={showPins}
         showRois={showRois}
         activeTypes={activeTypes}
         plan={activePlan}
         rois={rois}
+        sweepRoute={sweepRoute}
         selectedId={selectedId}
         accent={accent}
         panTarget={panTarget}
         onSelect={onSelect}
       />
+
+      {(sweepRoute || sweepLoading) && (
+        <SweepBanner
+          route={sweepRoute}
+          loading={sweepLoading}
+          accent={accent}
+          onClose={() => {
+            setSweepRoute(null);
+            setSweepLoading(false);
+          }}
+        />
+      )}
 
       <LayersPanel
         types={types}
@@ -457,6 +526,7 @@ export function MapPage() {
         <ObservationCard
           detail={detail}
           loading={detailLoading}
+          onViewSweep={onViewSweep}
           onHeight={setCardHeight}
           onClose={() => {
             setSelectedId(null);
@@ -470,3 +540,61 @@ export function MapPage() {
 
 const CENTER_MSG =
   "fixed inset-0 flex items-center justify-center gap-[11px] bg-background text-[13px] text-muted-foreground";
+
+// Formats a sweep's [start, end] window. Same-day windows collapse to one date with a
+// time range; multi-day windows show both dates. Spanish, CDMX time.
+const DATE_FMT = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short", timeZone: "America/Mexico_City" });
+const TIME_FMT = new Intl.DateTimeFormat("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" });
+
+function sweepWindow(startIso: string, endIso: string): string {
+  const s = new Date(startIso);
+  const e = new Date(endIso);
+  if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return "—";
+  const sameDay = DATE_FMT.format(s) === DATE_FMT.format(e);
+  return sameDay
+    ? `${DATE_FMT.format(s)} · ${TIME_FMT.format(s)}–${TIME_FMT.format(e)}`
+    : `${DATE_FMT.format(s)} – ${DATE_FMT.format(e)}`;
+}
+
+// Top-center banner shown while the sweep ("recorrido") coverage overlay is active.
+function SweepBanner({
+  route,
+  loading,
+  accent,
+  onClose,
+}: {
+  route: SweepRoute | null;
+  loading: boolean;
+  accent: string;
+  onClose: () => void;
+}) {
+  return (
+    <Panel className="absolute left-1/2 top-[18px] z-[540] flex -translate-x-1/2 items-center gap-3 py-2 pl-3 pr-2">
+      <span className="size-2.5 shrink-0 rounded-full" style={{ background: accent }} />
+      {loading || !route ? (
+        <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
+          <Spinner size={14} /> Cargando recorrido…
+        </div>
+      ) : (
+        <div className="flex items-center gap-2.5 text-[12px]">
+          <span className="font-mono text-[12px] font-bold tracking-[-0.2px]">{route.sweep}</span>
+          <span className="text-[var(--line-strong)]">·</span>
+          <span className="text-muted-foreground">{route.obsCount.toLocaleString("es-MX")} obs</span>
+          <span className="text-[var(--line-strong)]">·</span>
+          <span className="text-muted-foreground">{route.areaKm2.toFixed(1)} km²</span>
+          <span className="text-[var(--line-strong)]">·</span>
+          <span className="text-muted-foreground">{sweepWindow(route.startedAt, route.endedAt)}</span>
+        </div>
+      )}
+      <Button
+        variant="secondary"
+        size="icon-xs"
+        onClick={onClose}
+        title="Salir del recorrido"
+        className="size-[25px] shrink-0 rounded-[7px] bg-[#f1f4f8] text-base leading-none text-[var(--ink-2)]"
+      >
+        ×
+      </Button>
+    </Panel>
+  );
+}

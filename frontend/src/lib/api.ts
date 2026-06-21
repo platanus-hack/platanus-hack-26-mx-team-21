@@ -6,6 +6,7 @@ import type {
   ObservationDetail,
   Roi,
   RunSummary,
+  SweepRoute,
   Tenant,
   TypeCount,
 } from "./types";
@@ -43,6 +44,8 @@ export async function getObservations(): Promise<Observation[]> {
     zone: r.zone,
     districtCve: r.district_cve,
     districtName: r.district_name,
+    source: r.source,
+    thumbPath: r.thumb_path,
   }));
 }
 
@@ -72,6 +75,26 @@ export async function getObservationDetail(id: string): Promise<ObservationDetai
     detector: r.detector,
     districtName: r.district_name,
     zone: r.zone,
+  };
+}
+
+// Resolve the inspection sweep behind one observation: its coverage footprint
+// (GeoJSON), time window, observation count, and the originating point — for the
+// "Ver recorrido" overlay. Returns null if the observation isn't visible.
+export async function getSweepRoute(id: string): Promise<SweepRoute | null> {
+  const { data, error } = await supabase.rpc("app_sweep_route", { p_observation_id: id });
+  if (error) throw error;
+  const r = data?.[0];
+  if (!r) return null;
+  return {
+    sweep: r.sweep,
+    startedAt: r.started_at,
+    endedAt: r.ended_at,
+    obsCount: r.obs_count,
+    areaKm2: r.area_km2,
+    coverage: r.coverage_geojson,
+    originLat: r.origin_lat,
+    originLng: r.origin_lng,
   };
 }
 
