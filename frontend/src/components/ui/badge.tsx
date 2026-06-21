@@ -23,6 +23,19 @@ const badgeVariants = cva(
         statusConfirmed:
           "border border-[var(--success-line)] bg-[var(--success-soft)] text-[var(--success-ink)] font-mono text-[8px] font-semibold uppercase tracking-wide",
         type: "border border-[var(--line)] bg-[var(--surface-1)] text-[var(--ink-2)] font-mono text-[8px] font-semibold uppercase tracking-wide",
+        // plan / run lifecycle states — mono, square-ish, used by the dock & history
+        statusReady:
+          "rounded-[5px] border border-[var(--success-line)] bg-[var(--success-soft)] text-[var(--success-ink)] px-[7px] py-[2px] font-mono text-[9px] font-semibold uppercase tracking-wide",
+        statusRunning:
+          "rounded-[5px] border border-[var(--brand-line)] bg-[var(--brand-soft)] text-[var(--brand)] px-[7px] py-[2px] font-mono text-[9px] font-semibold uppercase tracking-wide",
+        statusQueued:
+          "rounded-[5px] border border-[#f5e3b0] bg-[var(--warning-soft)] text-[#8a6d00] px-[7px] py-[2px] font-mono text-[9px] font-semibold uppercase tracking-wide",
+        statusFailed:
+          "rounded-[5px] border border-[var(--danger-line)] bg-[var(--danger-soft)] text-[var(--danger)] px-[7px] py-[2px] font-mono text-[9px] font-semibold uppercase tracking-wide",
+        statusNeutral:
+          "rounded-[5px] border border-[#dde2e9] bg-[var(--bg)] text-[#7a8493] px-[7px] py-[2px] font-mono text-[9px] font-semibold uppercase tracking-wide",
+        // mono "tag" chip (counters, conf ×N, ago labels, rank badges)
+        tag: "rounded-[5px] bg-[var(--bg)] text-[#41506a] px-[7px] py-[3px] font-mono text-[9px] font-normal normal-case tracking-normal",
       },
     },
     defaultVariants: {

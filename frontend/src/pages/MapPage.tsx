@@ -5,6 +5,8 @@ import { AgentPanel } from "../components/AgentPanel";
 import { AnalysisDock } from "../components/AnalysisDock";
 import { HistoryPopover, type PlanHistoryItem } from "../components/HistoryPopover";
 import { ObservationCard } from "../components/ObservationCard";
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "../lib/auth";
 import * as api from "../lib/api";
 import { optimizePlan, parseDraft } from "../lib/citycrawlApi";
@@ -117,7 +119,7 @@ export function MapPage() {
   // (the open dock, height-measured; or the 52px launcher when collapsed).
   const LAUNCHER_H = 52;
   const PANEL_GAP = 16;
-  const layersBottom = 18 + (dockOpen ? dockHeight : LAUNCHER_H) + PANEL_GAP;
+  const [cardHeight, setCardHeight] = useState(0);
 
   // ---- plan lifecycle -----------------------------------------------------
   const [previewing, setPreviewing] = useState(false);
@@ -132,6 +134,13 @@ export function MapPage() {
   const [detail, setDetail] = useState<ObservationDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [panTarget, setPanTarget] = useState<{ lat: number; lng: number; n: number } | null>(null);
+
+  // The layers panel must clear whatever sits bottom-left: the dock/launcher
+  // (always) and the observation card (only while one is open). Both are
+  // anchored at bottom:18, so the taller wins.
+  const dockClearance = 18 + (dockOpen ? dockHeight : LAUNCHER_H) + PANEL_GAP;
+  const cardClearance = selectedId && cardHeight ? 18 + cardHeight + PANEL_GAP : 0;
+  const layersBottom = Math.max(dockClearance, cardClearance);
 
   const seq = useRef(1);
   const nextId = () => `plan-${seq.current++}`;
@@ -342,15 +351,17 @@ export function MapPage() {
   // ---- render -------------------------------------------------------------
   if (loadError) {
     return (
-      <div style={centerMsg}>
-        <div style={{ maxWidth: 420, textAlign: "center" }}>
-          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>
-            No se pudieron cargar los datos
-          </div>
-          <div style={{ fontSize: 12.5, color: "#8a94a3", lineHeight: 1.5 }}>{loadError}</div>
-          <button onClick={() => signOut()} style={signOutBtn}>
+      <div className={CENTER_MSG}>
+        <div className="max-w-[420px] text-center">
+          <div className="mb-2 text-[15px] font-bold">No se pudieron cargar los datos</div>
+          <div className="text-[12.5px] leading-[1.5] text-muted-foreground">{loadError}</div>
+          <Button
+            variant="outline"
+            onClick={() => signOut()}
+            className="mt-4 h-[34px] rounded-[9px] px-4 text-[12px] font-semibold text-[var(--ink-2)]"
+          >
             Cerrar sesión
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -358,14 +369,14 @@ export function MapPage() {
 
   if (!loaded) {
     return (
-      <div style={centerMsg}>
-        <span style={spinner} /> Cargando mapa de CDMX…
+      <div className={CENTER_MSG}>
+        <Spinner size={22} /> Cargando mapa de CDMX…
       </div>
     );
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#eef1f5", color: "#1b2430", overflow: "hidden" }}>
+    <div className="fixed inset-0 overflow-hidden bg-background text-foreground">
       <MapCanvas
         observations={observations}
         boundary={boundary}
@@ -376,7 +387,6 @@ export function MapPage() {
         rois={rois}
         selectedId={selectedId}
         accent={accent}
-        dockOpen={dockOpen}
         panTarget={panTarget}
         onSelect={onSelect}
       />
@@ -447,6 +457,7 @@ export function MapPage() {
         <ObservationCard
           detail={detail}
           loading={detailLoading}
+          onHeight={setCardHeight}
           onClose={() => {
             setSelectedId(null);
             setDetail(null);
@@ -457,35 +468,5 @@ export function MapPage() {
   );
 }
 
-const centerMsg: React.CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  background: "#eef1f5",
-  color: "#8a94a3",
-  fontSize: 13,
-  gap: 11,
-};
-const spinner: React.CSSProperties = {
-  width: 22,
-  height: 22,
-  border: "3px solid #e3e7ee",
-  borderTopColor: "#2f64e6",
-  borderRadius: "50%",
-  animation: "ppspin .7s linear infinite",
-  display: "inline-block",
-};
-const signOutBtn: React.CSSProperties = {
-  marginTop: 16,
-  height: 34,
-  padding: "0 16px",
-  border: "1px solid #e6e9ee",
-  background: "#fff",
-  borderRadius: 9,
-  fontSize: 12,
-  fontWeight: 600,
-  color: "#5b6675",
-  cursor: "pointer",
-};
+const CENTER_MSG =
+  "fixed inset-0 flex items-center justify-center gap-[11px] bg-background text-[13px] text-muted-foreground";

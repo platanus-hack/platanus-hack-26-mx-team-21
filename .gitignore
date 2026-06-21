@@ -149,8 +149,10 @@ activemq-data/
 
 # Environments
 .env
+.env.production
 .cloudflare.env
 .envrc
+.mcp.json
 .venv
 env/
 venv/

@@ -116,6 +116,23 @@ Cameras (routes / trash trucks)
 
 ---
 
+## Deployment
+
+The full stack — Supabase (Auth + Postgres), Cloudflare R2 + the `r2-access-broker`
+Worker, the `citycrawl-api` Fly app, and the Cloudflare Pages frontend at
+`citycrawl.dev` — is reproducible end-to-end from one runbook:
+
+**→ [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)** (dependency order, env-var matrix,
+verification checklist, common failure modes).
+
+Per-component detail: [`frontend/README.md`](frontend/README.md),
+[`services/api/README.md`](services/api/README.md),
+[`services/broker/README.md`](services/broker/README.md),
+[`supabase/seed/README.md`](supabase/seed/README.md). Adding a tenant test user:
+[`docs/runbooks/create-tenant-user.md`](docs/runbooks/create-tenant-user.md).
+
+---
+
 ## Repository Principles
 
 Because components are built **in parallel and independently**, the repo is

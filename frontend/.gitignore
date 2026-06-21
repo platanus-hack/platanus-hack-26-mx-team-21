@@ -8,3 +8,4 @@ dist/
 # ignores our TypeScript source dir. Re-include it.
 !src/lib/
 !src/lib/**
+.vite/
