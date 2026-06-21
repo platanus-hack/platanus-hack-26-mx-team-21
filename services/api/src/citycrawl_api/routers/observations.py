@@ -3,6 +3,7 @@
 and writes a vision.observations row that shows on the priority map."""
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import datetime, timezone
 
@@ -12,8 +13,12 @@ from citycrawl_api.auth import require_service
 from citycrawl_api.config import get_settings
 from citycrawl_api.errors import ApiError
 from citycrawl_api.logging import get_logger, log_event
+from citycrawl_api.modules.observations.inference import (
+    PgInferenceJobStore,
+    is_confirmed,
+)
 from citycrawl_api.modules.observations.schema import CitizenObservationResult
-from citycrawl_api.modules.observations.storage import make_thumbnail_store
+from citycrawl_api.modules.observations.storage import make_thumbnail_store, object_locator
 from citycrawl_api.modules.observations.store import PgObservationStore
 
 router = APIRouter(prefix="/v1/observations", tags=["observations"])
@@ -54,6 +59,33 @@ async def create_citizen_observation(
         store.write_bytes(thumbnail_path, data)
     except Exception as exc:  # noqa: BLE001 - surfaced as a clean 502
         raise ApiError(502, "storage_write_failed", "Could not store the report image") from exc
+
+    # Confirmation gate (disabled by default). When enabled, the photo must be confirmed
+    # by the non-public inference server before we create the observation.
+    if settings.inference_confirmation_enabled:
+        jobs = PgInferenceJobStore(settings.db_url)
+        job_id = jobs.enqueue(
+            observation_id=observation_id,
+            r2_url=object_locator(bucket, thumbnail_path),
+            thinking_mode=settings.inference_thinking_mode,
+        )
+        verdict = await asyncio.to_thread(
+            jobs.wait_for_result,
+            job_id,
+            timeout_s=settings.inference_timeout_s,
+            poll_interval_s=settings.inference_poll_interval_s,
+        )
+        if not is_confirmed(verdict):
+            log_event(
+                logger,
+                "citizen_observation_unconfirmed",
+                observationId=str(observation_id),
+                status=verdict["status"],
+            )
+            raise ApiError(
+                422, "not_confirmed",
+                "The photo could not be confirmed as a valid report",
+            )
 
     pg = PgObservationStore(settings.db_url)
     result = pg.create_citizen_observation(
