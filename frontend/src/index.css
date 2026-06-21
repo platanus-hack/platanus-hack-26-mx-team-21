@@ -72,6 +72,9 @@ body {
   font-family: "Public Sans", sans-serif;
 }
 
+.pp-scroll {
+  scrollbar-gutter: stable;
+}
 .pp-scroll::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -91,6 +94,7 @@ input[type="range"] {
   border-radius: 4px;
   background: #e3e7ee;
   outline: none;
+  cursor: pointer;
 }
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;

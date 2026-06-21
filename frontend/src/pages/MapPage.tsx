@@ -119,7 +119,7 @@ export function MapPage() {
   // (the open dock, height-measured; or the 52px launcher when collapsed).
   const LAUNCHER_H = 52;
   const PANEL_GAP = 16;
-  const layersBottom = 18 + (dockOpen ? dockHeight : LAUNCHER_H) + PANEL_GAP;
+  const [cardHeight, setCardHeight] = useState(0);
 
   // ---- plan lifecycle -----------------------------------------------------
   const [previewing, setPreviewing] = useState(false);
@@ -134,6 +134,13 @@ export function MapPage() {
   const [detail, setDetail] = useState<ObservationDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [panTarget, setPanTarget] = useState<{ lat: number; lng: number; n: number } | null>(null);
+
+  // The layers panel must clear whatever sits bottom-left: the dock/launcher
+  // (always) and the observation card (only while one is open). Both are
+  // anchored at bottom:18, so the taller wins.
+  const dockClearance = 18 + (dockOpen ? dockHeight : LAUNCHER_H) + PANEL_GAP;
+  const cardClearance = selectedId && cardHeight ? 18 + cardHeight + PANEL_GAP : 0;
+  const layersBottom = Math.max(dockClearance, cardClearance);
 
   const seq = useRef(1);
   const nextId = () => `plan-${seq.current++}`;
@@ -450,6 +457,7 @@ export function MapPage() {
         <ObservationCard
           detail={detail}
           loading={detailLoading}
+          onHeight={setCardHeight}
           onClose={() => {
             setSelectedId(null);
             setDetail(null);

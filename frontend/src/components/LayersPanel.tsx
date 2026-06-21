@@ -44,7 +44,7 @@ export function LayersPanel(props: Props) {
   return (
     <Panel
       className="absolute left-[18px] top-[18px] z-[500] flex w-[236px] flex-col"
-      style={{ bottom: props.bottom }}
+      style={{ bottom: props.bottom, transition: "bottom 0.2s ease" }}
     >
       {/* header */}
       <div className="flex shrink-0 items-center gap-2.5 border-b border-[var(--line-2)] px-3.5 py-[13px]">
@@ -76,13 +76,6 @@ export function LayersPanel(props: Props) {
           <span className={COUNT}>{props.totalObs}</span>
         </Button>
 
-        {/* volume legend */}
-        <div className="flex items-center gap-2 py-[3px] pb-[5px] pl-[27px]">
-          <span className="text-[9.5px] text-[#aab2bd]">menor</span>
-          <span className="h-2 flex-1 rounded-[5px] bg-[linear-gradient(90deg,#30a46c,#f5a623,#e5484d)]" />
-          <span className="text-[9.5px] text-[#aab2bd]">mayor volumen</span>
-        </div>
-
         <Button variant="ghost" onClick={props.onToggleRois} className={ROW}>
           <Indicator on={props.showRois} color="#e5484d" />
           <span className="flex-1 text-left text-[12.5px] font-semibold">Zonas de riesgo</span>
@@ -98,21 +91,29 @@ export function LayersPanel(props: Props) {
         {props.types.map((t) => {
           const on = props.activeTypes[t.slug];
           return (
-            <Button
-              key={t.slug}
-              variant="ghost"
-              onClick={() => props.onToggleType(t.slug)}
-              className={`${ROW} ${on ? "opacity-100" : "opacity-55"}`}
-            >
-              <Indicator on={on} color={typeColor(t.slug)} round />
-              <span
-                className="flex-1 text-left text-[12px] font-semibold"
-                style={{ color: on ? "#1b2430" : "#a9b1bd" }}
+            <div key={t.slug}>
+              <Button
+                variant="ghost"
+                onClick={() => props.onToggleType(t.slug)}
+                className={`${ROW} ${on ? "opacity-100" : "opacity-55"}`}
               >
-                {t.label}
-              </span>
-              <span className="font-mono text-[9.5px] text-[#aab2bd]">{t.count}</span>
-            </Button>
+                <Indicator on={on} color={typeColor(t.slug)} round />
+                <span
+                  className="flex-1 text-left text-[12px] font-semibold"
+                  style={{ color: on ? "#1b2430" : "#a9b1bd" }}
+                >
+                  {t.label}
+                </span>
+                <span className="font-mono text-[9.5px] text-[#aab2bd]">{t.count}</span>
+              </Button>
+              {t.slug === "pothole" && (
+                <div className="-mt-0.5 flex items-center gap-1.5 pb-1 pl-[27px]">
+                  <span className="text-[9px] text-[#aab2bd]">menor</span>
+                  <span className="h-1.5 flex-1 rounded-full bg-[linear-gradient(90deg,#30a46c,#f5a623,#e5484d)]" />
+                  <span className="text-[9px] text-[#aab2bd]">mayor área</span>
+                </div>
+              )}
+            </div>
           );
         })}
 

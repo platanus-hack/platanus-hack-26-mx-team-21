@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { ObservationDetail } from "../lib/types";
 import { typeColor } from "../lib/types";
 import { Panel } from "@/components/ui/panel";
@@ -9,6 +10,8 @@ interface Props {
   detail: ObservationDetail | null;
   loading: boolean;
   onClose: () => void;
+  /** Reports the card's rendered height so the layers panel can lift clear of it. */
+  onHeight?: (h: number) => void;
 }
 
 const SHELL = "absolute left-[18px] bottom-[18px] z-[530] w-[300px]";
@@ -23,10 +26,23 @@ function agoLabel(iso: string): string {
   return `hace ${Math.round(hrs / 24)} d`;
 }
 
-export function ObservationCard({ detail, loading, onClose }: Props) {
+export function ObservationCard({ detail, loading, onClose, onHeight }: Props) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Keep the layers panel informed of our height (varies between the loading
+  // and loaded states, and with content) so it can stay lifted clear of us.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !onHeight) return;
+    onHeight(el.offsetHeight);
+    const ro = new ResizeObserver(() => onHeight(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [onHeight, loading, detail]);
+
   if (loading || !detail) {
     return (
-      <Panel className={SHELL}>
+      <Panel ref={ref} className={SHELL}>
         <div className="h-[5px] bg-[var(--line-strong)]" />
         <div className="flex items-center gap-2.5 p-[18px] text-[12.5px] text-muted-foreground">
           <Spinner size={18} />
@@ -43,7 +59,7 @@ export function ObservationCard({ detail, loading, onClose }: Props) {
   const bbox = d.imageBbox;
 
   return (
-    <Panel className={SHELL}>
+    <Panel ref={ref} className={SHELL}>
       <div className="h-[5px]" style={{ background: color }} />
       <div className="px-3.5 pt-[13px] pb-3.5">
         <div className="flex items-start justify-between gap-2.5">

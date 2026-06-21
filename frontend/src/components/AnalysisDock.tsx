@@ -62,6 +62,19 @@ export function AnalysisDock(props: Props) {
     if (!props.open) setPop(null);
   }, [props.open]);
 
+  // Dismiss the open popover on any click outside the controls area.
+  const controlsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!pop) return;
+    const onDown = (e: MouseEvent) => {
+      if (!controlsRef.current?.contains(e.target as Node)) setPop(null);
+    };
+    // Capture phase: Leaflet stops propagation of mousedown over the map,
+    // so a bubble-phase listener would never fire for clicks on the map.
+    document.addEventListener("mousedown", onDown, true);
+    return () => document.removeEventListener("mousedown", onDown, true);
+  }, [pop]);
+
   // Collapse/expand by animating the BODY's height; the header stays as the bar.
   // height:auto can't be transitioned, so we go auto → fixed px → 0 (and back).
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -163,45 +176,45 @@ export function AnalysisDock(props: Props) {
           transition: "height .2s ease",
         }}
       >
-        {/* issue-type selector */}
-        <div className="flex items-center gap-[9px] border-b border-[var(--surface-2)] px-3.5 py-[9px]">
-          <span className={MINI_LABEL}>Tipo</span>
-          <div className="relative max-w-[280px] flex-[1_1_220px]">
-            <span
-              className="pointer-events-none absolute left-[11px] top-1/2 size-[9px] -translate-y-1/2 rounded-full"
-              style={{ background: typeColor(props.issueType) }}
-            />
-            <select
-              value={props.issueType}
-              onChange={(e) => props.onSetIssueType(e.target.value)}
-              className="h-8 w-full cursor-pointer appearance-none rounded-[9px] border border-[var(--line)] bg-card pl-[27px] pr-[30px] text-[12.5px] font-semibold text-foreground"
-            >
-              {props.types.map((t) => {
-                const active = ACTIVE_ISSUE_TYPES.has(t.slug);
-                const label = props.typeLabels[t.slug] ?? t.label;
-                return (
-                  <option key={t.slug} value={t.slug} disabled={!active}>
-                    {active ? label : `${label} · próximamente`}
-                  </option>
-                );
-              })}
-            </select>
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              className="pointer-events-none absolute right-[9px] top-1/2 -translate-y-1/2"
-            >
-              <path d="M6 9l6 6 6-6" stroke="#8a94a3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+        {/* row 1 — issue type + budget, paired on one line */}
+        <div className="flex flex-wrap items-center gap-x-[18px] gap-y-[10px] border-b border-[var(--surface-2)] px-3.5 py-[10px]">
+          {/* tipo */}
+          <div className="flex shrink-0 items-center gap-[9px]">
+            <span className={MINI_LABEL}>Tipo</span>
+            <div className="relative w-[190px]">
+              <span
+                className="pointer-events-none absolute left-[11px] top-1/2 size-[9px] -translate-y-1/2 rounded-full"
+                style={{ background: typeColor(props.issueType) }}
+              />
+              <select
+                value={props.issueType}
+                onChange={(e) => props.onSetIssueType(e.target.value)}
+                className="h-8 w-full cursor-pointer appearance-none rounded-[9px] border border-[var(--line)] bg-card pl-[27px] pr-[30px] text-[12.5px] font-semibold text-foreground"
+              >
+                {props.types.map((t) => {
+                  const active = ACTIVE_ISSUE_TYPES.has(t.slug);
+                  const label = props.typeLabels[t.slug] ?? t.label;
+                  return (
+                    <option key={t.slug} value={t.slug} disabled={!active}>
+                      {active ? label : `${label} · próximamente`}
+                    </option>
+                  );
+                })}
+              </select>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                className="pointer-events-none absolute right-[9px] top-1/2 -translate-y-1/2"
+              >
+                <path d="M6 9l6 6 6-6" stroke="#8a94a3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
           </div>
-        </div>
 
-        {/* controls */}
-        <div className="relative flex flex-wrap items-center gap-[13px] px-3.5 pb-[13px] pt-[11px]">
-          {/* budget */}
-          <div className="flex min-w-[170px] flex-[1_1_200px] items-center gap-2.5">
+          {/* presupuesto */}
+          <div className="flex min-w-[230px] flex-1 items-center gap-2.5">
             <span className={MINI_LABEL}>Presupuesto</span>
             <input
               type="range"
@@ -216,7 +229,10 @@ export function AnalysisDock(props: Props) {
               {money(props.budget)}
             </span>
           </div>
+        </div>
 
+        {/* row 2 — region, cuadrillas, cost basis, and the generate button inline */}
+        <div ref={controlsRef} className="relative flex flex-wrap items-center gap-[13px] px-3.5 pb-[13px] pt-[12px]">
           {/* region filter */}
           <Button
             variant="outline"
@@ -236,21 +252,26 @@ export function AnalysisDock(props: Props) {
             <Button
               variant="outline"
               onClick={() => props.onSetSquadOverride(auto ? squadValue : null)}
-              className={pillClass(!auto)}
+              className={cn(pillClass(!auto), "w-[74px]")}
             >
               {auto ? "Auto" : "Manual"}
             </Button>
-            {!auto && (
-              <div className="flex items-center rounded-lg border border-[var(--line-2)] bg-card">
-                <Button variant="ghost" size="icon" onClick={() => props.onSetSquadOverride(Math.max(1, squadValue - 1))} className={STEP_BTN}>
-                  −
-                </Button>
-                <div className="min-w-[22px] text-center font-mono text-[12px] font-semibold">{squadValue}</div>
-                <Button variant="ghost" size="icon" onClick={() => props.onSetSquadOverride(Math.min(MAX_SQUADS, squadValue + 1))} className={STEP_BTN}>
-                  +
-                </Button>
-              </div>
-            )}
+            {/* always mounted so toggling Auto↔Manual doesn't reflow the row; hidden (space reserved) when auto */}
+            <div
+              aria-hidden={auto}
+              className={cn(
+                "flex items-center rounded-lg border border-[var(--line-2)] bg-card",
+                auto && "invisible",
+              )}
+            >
+              <Button variant="ghost" size="icon" onClick={() => props.onSetSquadOverride(Math.max(1, squadValue - 1))} className={STEP_BTN}>
+                −
+              </Button>
+              <div className="min-w-[22px] text-center font-mono text-[12px] font-semibold">{squadValue}</div>
+              <Button variant="ghost" size="icon" onClick={() => props.onSetSquadOverride(Math.min(MAX_SQUADS, squadValue + 1))} className={STEP_BTN}>
+                +
+              </Button>
+            </div>
           </div>
 
           {/* cost basis */}
