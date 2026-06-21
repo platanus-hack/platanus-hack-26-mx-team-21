@@ -3,3 +3,8 @@ dist/
 .env
 .env.local
 .env.*.local
+
+# The repo-root .gitignore is Python-oriented; its `lib/` rule wrongly
+# ignores our TypeScript source dir. Re-include it.
+!src/lib/
+!src/lib/**
