@@ -72,3 +72,13 @@ async def require_operator(
     if not x_operator_key or not hmac.compare_digest(x_operator_key, expected):
         raise forbidden("Invalid operator key")
     return user
+
+
+async def require_service(x_operator_key: str | None = Header(default=None)) -> None:
+    """Server-to-server guard: only the operator key, NO user token. For trusted internal
+    callers (e.g. the WhatsApp controller) that have no browser session."""
+    expected = get_settings().operator_api_key
+    if not expected:
+        raise ApiError(503, "operator_unconfigured", "Operator access is not configured")
+    if not x_operator_key or not hmac.compare_digest(x_operator_key, expected):
+        raise forbidden("Invalid operator key")
