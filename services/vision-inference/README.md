@@ -18,10 +18,13 @@ OpenAI-compatible). Nothing is sent to a third-party inference provider.
 
 ## Architecture — three pillars
 
-1. **Fine-tuned detectors (segmentation).** Specialist YOLO models we fine-tuned for road
-   defects — `pablo_v1` (YOLO-seg pothole masks) and an RDD2022 YOLOv12 — plus a Segformer
-   (Cityscapes) road/floor mask to gate detections to the drivable surface. Fast (ms/frame),
-   precise on potholes, and they run every frame in the offline `pipeline/`.
+1. **Fine-tuned detector (segmentation) — our own model.** A **YOLO26 segmentation** model we
+   fine-tuned for potholes on **images we captured and annotated manually** (street-level
+   photos, hand-labeled pothole masks). Paired with a Segformer (Cityscapes) road/floor mask
+   that gates detections to the drivable surface (kills off-road false positives). Fast
+   (ms/frame), runs every frame in the offline `pipeline/`. A public **RDD2022 YOLOv12** model
+   serves only as an external baseline we compared against — our YOLO26-seg is the one in the
+   cascade. Training/test data and ground truth: see `docs/vision_model_and_ground_truth.md`.
 2. **VLM as validator (cascade).** The detector proposes; a **locally-served Qwen2.5-VL**
    confirms each candidate (real pothole vs. shadow / manhole / patch). Segmentation +
    VLM together = high precision **without training the VLM**.
@@ -55,7 +58,8 @@ pipeline/    # offline GPU pipeline (detector + render): potholes seg, perspecti
              # dynamic anomaly captions, GPS-georeferenced GeoJSON (needs model weights)
 ops/         # vLLM launch + Triton(vLLM-backend) scaffold for the unified-server option
 docs/        # PLAN.md (architecture, stages, RAG), architecture_justification.md (vLLM+Triton+gRPC,
-             # presentation), vllm_perf_analysis.md (perf/experiments), prompts.md
+             # presentation), vision_model_and_ground_truth.md (YOLO26-seg dataset + ground truth),
+             # vllm_perf_analysis.md (perf/experiments), prompts.md
 ```
 
 ## Modes (latency vs detail)

@@ -1,7 +1,7 @@
 """Offline cascade -> baked final video.
 
 For each video:
-  pass 1 (detector, every sampled frame): pablo_v1 YOLO-seg + Segformer floor mask;
+  pass 1 (detector, every sampled frame): YOLO26-seg (our fine-tune) + Segformer floor mask;
           keep on-floor pothole boxes; tint road pink; assign detections to events (dedup).
   pass 2 (VLM on EVENTS only): 32B Qwen2.5-VL verifies each event's best frame ->
           POTHOLE vs ANOMALY + caption.
@@ -45,7 +45,7 @@ M = {}  # loaded models
 
 
 def load_all(vlm_dir: Path):
-    M["yolo"] = YOLO(str(MODELS / "pablo_v1" / "pablo_v1.pt"))
+    M["yolo"] = YOLO(str(MODELS / "pablo_v1" / "pablo_v1.pt"))   # YOLO26-seg weights (legacy filename)
     M["pids"] = {i for i, n in M["yolo"].names.items() if n.lower() == "pothole"} or set(M["yolo"].names)
     sd = MODELS / "segformer-cityscapes"
     M["seg_proc"] = SegformerImageProcessor.from_pretrained(sd, local_files_only=True)

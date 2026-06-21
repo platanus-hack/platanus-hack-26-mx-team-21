@@ -39,8 +39,9 @@ the whole argument.
 - **Model ensemble / BLS** — chain *detector → floor-gate (Segformer) → optional VLM-verify*
   inside one server call, no round-trips.
 - **CUDA shared-memory I/O & metrics** — production-grade serving for high-FPS streams.
-- Mature, batteries-included for vision; we keep our **fine-tuned** detectors (`pablo_v1`
-  YOLO-seg, RDD2022) here.
+- Mature, batteries-included for vision; we keep our **fine-tuned YOLO26 segmentation** model
+  (trained on manually-captured, manually-annotated pothole images) here, plus the Segformer
+  floor gate. See `docs/vision_model_and_ground_truth.md`.
 
 ## Why **gRPC** between them
 - **Low-latency binary protocol** (protobuf + HTTP/2 multiplexing, streaming) — right for

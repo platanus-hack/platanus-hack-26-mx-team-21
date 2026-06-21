@@ -1,7 +1,8 @@
 # Anomaly API — plan de arquitectura (Triton unificado + vLLM)
 
 Servicio que recibe una imagen (link R2) y devuelve anomalías. Un cliente puede pedir:
-- **baches** (detector) — cajas de potholes (modelo de segmentación pablo_v1) — opción rápida,
+- **baches** (detector) — cajas/máscaras de potholes (modelo de **segmentación YOLO26**,
+  fine-tuneado con imágenes capturadas y anotadas manualmente) — opción rápida,
 - **baches verificados** — detector + el VLM confirma (cascade interno),
 - **análisis VLM** de la imagen (descripción + anomalías urbanas) con tres niveles:
   - **fast** → Qwen2.5-VL-**7B**
@@ -17,7 +18,7 @@ TRITON (HTTP :8000 / gRPC :8001)  [imagen triton-vllm, torch propio]
  ├── qwen_fast        (vLLM backend, Qwen2.5-VL-7B)        modo fast
  ├── qwen_thinking    (vLLM backend, Qwen2.5-VL-32B)       modo thinking
  ├── qwen_reason      (vLLM backend, PENDIENTE)            modo reason (futuro)
- ├── pothole_detector (python backend: pablo_v1 seg + Segformer floor) -> cajas baches
+ ├── pothole_detector (python backend: YOLO26-seg + Segformer floor) -> cajas baches
  └── pothole_verified (BLS ensemble): pothole_detector -> por cada bache llama qwen_fast
                          para validar (¿bache real vs alcantarilla/sombra?) -> baches verificados
 ```
@@ -48,9 +49,10 @@ NGC `2.12.0a0+…nv26.05` (optimizado para el servidor GPU). Por eso:
 
 ## ¿Por qué LocateAnything NO entró (aunque "ayudaría al bache")?
 No fue solo por la segmentación; son varias razones, en orden:
-1. **Ya hay un especialista mejor para detectar baches**: pablo_v1 / RDD2022 (YOLO) son
-   detectores/segmentadores rápidos (ms/frame) y más precisos en pothole que un VLM
-   zero-shot. LocateAnything-3B localiza por texto (lento, ~como un LLM).
+1. **Ya hay un especialista mejor para detectar baches**: nuestro **YOLO26-seg** (fine-tune
+   con imágenes manuales) y el baseline público RDD2022 son detectores/segmentadores rápidos
+   (ms/frame) y más precisos en pothole que un VLM zero-shot. LocateAnything-3B localiza por
+   texto (lento, ~como un LLM).
 2. **Calidad/estabilidad**: en nuestras pruebas LocateAnything dio cajas **degeneradas
    (runaway)** y resultados inestables; no apto como detector de producción.
 3. **Redundancia con Qwen-VL**: para *razonar/verificar/describir* ya usamos Qwen2.5-VL

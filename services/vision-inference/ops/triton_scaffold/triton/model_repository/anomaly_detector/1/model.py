@@ -1,11 +1,12 @@
-"""Triton Python-backend detector: pablo_v1 YOLO-seg + Segformer floor gate.
+"""Triton Python-backend detector: YOLO26-seg (our fine-tune) + Segformer floor gate.
 
 Runs on EVERY frame. Returns only on-floor pothole boxes (the floor gate drops
 off-road false positives). Fast path; for lowest latency export the YOLO to a
 TensorRT engine and replace this with an ensemble (see export/export_yolo_trt.py).
 
-Models are expected mounted at /models inside the Triton container:
-  /models/pablo_v1/pablo_v1.pt
+Models are expected mounted at /models inside the Triton container
+(the YOLO26-seg weights file is named pablo_v1.pt on disk for historical reasons):
+  /models/pablo_v1/pablo_v1.pt   # YOLO26-seg weights
   /models/segformer-cityscapes/
 Set env ANOMALY_MODELS_DIR to override.
 """

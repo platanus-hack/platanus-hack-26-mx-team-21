@@ -14,7 +14,7 @@ services:
       ANOMALY_MODELS_DIR: /models
     volumes:
       - ./triton/model_repository:/models_repo
-      - ../models:/models:ro          # pablo_v1 + segformer-cityscapes
+      - ../models:/models:ro          # YOLO26-seg weights + segformer-cityscapes
     ports: ["8001:8001", "8002:8002"]
     # NOTE: the python backend needs ultralytics+transformers in Triton's python env.
     # Either bake a custom Triton image or use a python-backend execution-env (conda-pack).

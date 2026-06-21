@@ -1,4 +1,4 @@
-"""Export pablo_v1 YOLO-seg to ONNX / TensorRT for the fast Triton path.
+"""Export our YOLO26-seg pothole model to ONNX / TensorRT for the fast Triton path.
 
 Run INSIDE the moe image on the GPU server (TensorRT engines are hardware-specific — build on
 the same server you'll serve from). After export, point a Triton 'tensorrt'/'onnxruntime' model
@@ -13,7 +13,7 @@ from pathlib import Path
 from ultralytics import YOLO
 
 ROOT = Path(__file__).resolve().parents[2]
-MODEL = ROOT / "models" / "pablo_v1" / "pablo_v1.pt"
+MODEL = ROOT / "models" / "pablo_v1" / "pablo_v1.pt"   # YOLO26-seg weights (legacy filename)
 
 
 def main():

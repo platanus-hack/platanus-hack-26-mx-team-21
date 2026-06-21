@@ -93,7 +93,7 @@ def main() -> None:
         ans = processor.decode(gen[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)
         dt = time.perf_counter() - t0
         p = parse_json(ans)
-        rows.append({"frame": idx, "pablo_v1_score": scores.get(idx),
+        rows.append({"frame": idx, "yolo26_seg_score": scores.get(idx),
                      "vlm": p, "secs": round(dt, 1)})
         out_path.write_text(json.dumps(rows, indent=2))  # incremental save
         print(f"f{idx} (det {scores.get(idx)}): pothole={p.get('pothole_present')} "

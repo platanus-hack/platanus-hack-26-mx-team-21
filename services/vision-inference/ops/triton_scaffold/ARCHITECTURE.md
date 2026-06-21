@@ -12,7 +12,7 @@ only where it's needed.
    │                                              ┌───────────────────────────┐
    │                                              │ TRITON (gRPC :8001)        │
    │                                              │  anomaly_detector model    │
-   │                                              │  pablo_v1 YOLO-seg +        │
+   │                                              │  YOLO26-seg (our fine-tune)+│
    │                                              │  Segformer floor mask +     │
    │                                              │  floor gate → boxes         │
    │                                              └───────────────────────────┘
