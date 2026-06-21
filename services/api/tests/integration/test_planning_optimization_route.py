@@ -22,6 +22,7 @@ def test_optimize_reports_optimization_engine(client):
 
 def test_optimize_schema_and_budget_invariant(client):
     r = client.post("/v1/planning/optimize", json=_req(20_000.0))
+    assert r.status_code == 200, r.text
     body = r.json()
     assert set(body) >= {"issueType", "budget", "squads", "topCritical", "stats", "squadCountUsed"}
     assert body["stats"]["spent"] <= 20_000.0

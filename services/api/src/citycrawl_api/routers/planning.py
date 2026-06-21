@@ -1,6 +1,6 @@
 """Planning routes. These move the two former client-side mocks behind the API. Both
-depend on the PlanningEngine protocol; the bound engine is a labelled mock today and is
-reported via the X-Planning-Engine response header."""
+depend on the PlanningEngine protocol; the bound engine is selected by PLANNING_ENGINE
+(default: optimization) and reported via the X-Planning-Engine response header."""
 from __future__ import annotations
 from fastapi import APIRouter, Depends, Response
 
