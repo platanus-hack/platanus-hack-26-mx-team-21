@@ -7,7 +7,12 @@ from fastapi import APIRouter, Depends
 from citycrawl_api.auth import User, require_user
 from citycrawl_api.config import get_settings
 from citycrawl_api.modules.llm.anthropic import AnthropicDraftParser
-from citycrawl_api.modules.llm.models import DraftParseRequest, PlanDraft
+from citycrawl_api.modules.llm.models import (
+    DraftChatRequest,
+    DraftChatResponse,
+    DraftParseRequest,
+    PlanDraft,
+)
 from citycrawl_api.modules.llm.protocol import DraftParser
 
 router = APIRouter(prefix="/v1/llm", tags=["llm"])
@@ -24,3 +29,12 @@ async def parse_draft(
     _user: User = Depends(require_user),
 ) -> PlanDraft:
     return await parser.parse(request)
+
+
+@router.post("/chat", response_model=DraftChatResponse, response_model_by_alias=True)
+async def chat_draft(
+    request: DraftChatRequest,
+    parser: DraftParser = Depends(get_draft_parser),
+    _user: User = Depends(require_user),
+) -> DraftChatResponse:
+    return await parser.chat(request)
