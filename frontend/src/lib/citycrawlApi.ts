@@ -5,7 +5,9 @@ import { supabase } from "./supabase";
 import type {
   AnalysisPoint,
   AnalysisRequest,
+  ChatMessage,
   ClusteredPriority,
+  DraftChatResponse,
   PlanDraft,
   PlanResult,
   RegionOption,
@@ -56,17 +58,20 @@ export function clusterPriorities(
   return post<ClusteredPriority[]>("/v1/planning/priorities:cluster", { points, squadCount }, signal);
 }
 
-// Natural-language draft parsing — returns an editable draft; never auto-runs a plan.
-export function parseDraft(
-  prompt: string,
+// Conversational agent turn — sends the full message history plus the draft accumulated so
+// far, and gets back a Spanish reply and the merged draft. Populates the dock; never auto-runs.
+export function chatDraft(
+  messages: ChatMessage[],
+  draft: PlanDraft | null,
   issueTypes: TypeCount[],
   regions: RegionOption[],
   signal?: AbortSignal,
-): Promise<PlanDraft> {
-  return post<PlanDraft>(
-    "/v1/llm/drafts:parse",
+): Promise<DraftChatResponse> {
+  return post<DraftChatResponse>(
+    "/v1/llm/chat",
     {
-      prompt,
+      messages,
+      draft,
       issueTypes: issueTypes.map((t) => ({ slug: t.slug, label: t.label })),
       regions: regions.map((r) => ({ cve: r.cve, name: r.name })),
     },

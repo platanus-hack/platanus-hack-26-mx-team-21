@@ -37,7 +37,6 @@ class Settings(BaseSettings):
     ingest_service_key: str | None = None
 
     # --- Citizen-report confirmation gate (non-public inference server) -------
-    inference_confirmation_enabled: bool = False
     inference_thinking_mode: str = "flash"     # 'flash' | 'thinking'
     inference_timeout_s: float = 60.0
     inference_poll_interval_s: float = 1.0
@@ -62,6 +61,12 @@ class Settings(BaseSettings):
     # --- Upstream timeouts (seconds) -----------------------------------------
     supabase_timeout_s: float = 10.0
     anthropic_timeout_s: float = 30.0
+
+    # --- Planning engine ------------------------------------------------------
+    planning_engine: str = "optimization"     # "optimization" | "mock"
+    tomtom_api_key: str | None = None
+    traffic_cache_path: str = ".data/traffic_cache.json"
+    traffic_grid_decimals: int = 3
 
     # --- Request limits ------------------------------------------------------
     # Max accepted request body size (bytes). Enforced both by a middleware on

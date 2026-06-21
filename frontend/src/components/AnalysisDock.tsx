@@ -1,31 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { money } from "../lib/money";
-import {
-  ACTIVE_ISSUE_TYPES,
-  BUDGET_MAX,
-  BUDGET_MIN,
-  BUDGET_STEP,
-  DEFAULT_SQUADS,
-  MAX_SQUADS,
-  typeColor,
-  typeStep,
-  typeUnit,
-} from "../lib/types";
-import type { RegionOption, TypeCount } from "../lib/types";
+import { BUDGET_MAX, BUDGET_MIN, BUDGET_STEP } from "../lib/types";
+import type { RegionOption } from "../lib/types";
 import { cn } from "@/lib/utils";
 import { Panel } from "@/components/ui/panel";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 
 interface Props {
-  issueType: string;
   budget: number;
   regions: RegionOption[];
   regionFilter: string[];
-  squadOverride: number | null;
-  costs: Record<string, number>;
-  types: TypeCount[];
-  typeLabels: Record<string, string>;
   pointCount: number;
   previewing: boolean;
   generating?: boolean;
@@ -33,19 +18,15 @@ interface Props {
   hasHistory: boolean;
   open: boolean;
   onToggleOpen: () => void;
-  onSetIssueType: (slug: string) => void;
   onBudget: (v: number) => void;
   onToggleRegion: (cve: string) => void;
   onClearRegions: () => void;
-  onSetSquadOverride: (n: number | null) => void;
-  onAdjCost: (slug: string, delta: number) => void;
   onGenerate: () => void;
   onToggleHistory: () => void;
   onHeight?: (h: number) => void;
 }
 
 const MINI_LABEL = "shrink-0 text-[10px] font-bold uppercase tracking-[0.4px] text-muted-foreground";
-const STEP_BTN = "h-[26px] w-6 rounded-none text-[15px] leading-none text-[var(--ink-2)] hover:bg-transparent";
 
 function pillClass(active: boolean) {
   return cn(
@@ -55,25 +36,25 @@ function pillClass(active: boolean) {
 }
 
 export function AnalysisDock(props: Props) {
-  const [pop, setPop] = useState<"region" | "cost" | null>(null);
-  const togglePop = (p: "region" | "cost") => setPop((cur) => (cur === p ? null : p));
+  // Only the region (alcaldías) picker has a popover now.
+  const [regionOpen, setRegionOpen] = useState(false);
 
   useEffect(() => {
-    if (!props.open) setPop(null);
+    if (!props.open) setRegionOpen(false);
   }, [props.open]);
 
   // Dismiss the open popover on any click outside the controls area.
   const controlsRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!pop) return;
+    if (!regionOpen) return;
     const onDown = (e: MouseEvent) => {
-      if (!controlsRef.current?.contains(e.target as Node)) setPop(null);
+      if (!controlsRef.current?.contains(e.target as Node)) setRegionOpen(false);
     };
     // Capture phase: Leaflet stops propagation of mousedown over the map,
     // so a bubble-phase listener would never fire for clicks on the map.
     document.addEventListener("mousedown", onDown, true);
     return () => document.removeEventListener("mousedown", onDown, true);
-  }, [pop]);
+  }, [regionOpen]);
 
   // Collapse/expand by animating the BODY's height; the header stays as the bar.
   // height:auto can't be transitioned, so we go auto → fixed px → 0 (and back).
@@ -103,14 +84,12 @@ export function AnalysisDock(props: Props) {
   useEffect(() => {
     const el = cardRef.current;
     if (el && onHeight && props.open && bodyH === "auto") onHeight(el.offsetHeight);
-  }, [onHeight, props.open, bodyH, props.pointCount, props.budget, props.squadOverride, props.regionFilter]);
+  }, [onHeight, props.open, bodyH, props.pointCount, props.budget, props.regionFilter]);
 
   const regionLabel =
     props.regionFilter.length === 0
       ? "Todas las alcaldías"
       : `${props.regionFilter.length} alcaldía${props.regionFilter.length > 1 ? "s" : ""}`;
-  const squadValue = props.squadOverride ?? DEFAULT_SQUADS;
-  const auto = props.squadOverride == null;
   const genDisabled = props.pointCount === 0 || !!props.generating;
 
   return (
@@ -176,44 +155,8 @@ export function AnalysisDock(props: Props) {
           transition: "height .2s ease",
         }}
       >
-        {/* row 1 — issue type + budget, paired on one line */}
+        {/* row 1 — presupuesto */}
         <div className="flex flex-wrap items-center gap-x-[18px] gap-y-[10px] border-b border-[var(--surface-2)] px-3.5 py-[10px]">
-          {/* tipo */}
-          <div className="flex shrink-0 items-center gap-[9px]">
-            <span className={MINI_LABEL}>Tipo</span>
-            <div className="relative w-[190px]">
-              <span
-                className="pointer-events-none absolute left-[11px] top-1/2 size-[9px] -translate-y-1/2 rounded-full"
-                style={{ background: typeColor(props.issueType) }}
-              />
-              <select
-                value={props.issueType}
-                onChange={(e) => props.onSetIssueType(e.target.value)}
-                className="h-8 w-full cursor-pointer appearance-none rounded-[9px] border border-[var(--line)] bg-card pl-[27px] pr-[30px] text-[12.5px] font-semibold text-foreground"
-              >
-                {props.types.map((t) => {
-                  const active = ACTIVE_ISSUE_TYPES.has(t.slug);
-                  const label = props.typeLabels[t.slug] ?? t.label;
-                  return (
-                    <option key={t.slug} value={t.slug} disabled={!active}>
-                      {active ? label : `${label} · próximamente`}
-                    </option>
-                  );
-                })}
-              </select>
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                className="pointer-events-none absolute right-[9px] top-1/2 -translate-y-1/2"
-              >
-                <path d="M6 9l6 6 6-6" stroke="#8a94a3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </div>
-          </div>
-
-          {/* presupuesto */}
           <div className="flex min-w-[230px] flex-1 items-center gap-2.5">
             <span className={MINI_LABEL}>Presupuesto</span>
             <input
@@ -231,52 +174,19 @@ export function AnalysisDock(props: Props) {
           </div>
         </div>
 
-        {/* row 2 — region, cuadrillas, cost basis, and the generate button inline */}
+        {/* row 2 — region (locations) filter and the generate button inline */}
         <div ref={controlsRef} className="relative flex flex-wrap items-center gap-[13px] px-3.5 pb-[13px] pt-[12px]">
-          {/* region filter */}
+          {/* region filter — the only parameter that shapes the optimization input */}
           <Button
             variant="outline"
-            onClick={() => togglePop("region")}
-            className={pillClass(pop === "region" || props.regionFilter.length > 0)}
+            onClick={() => setRegionOpen((v) => !v)}
+            className={pillClass(regionOpen || props.regionFilter.length > 0)}
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" className="shrink-0">
               <path d="M12 21s-7-5.4-7-11a7 7 0 1114 0c0 5.6-7 11-7 11z" stroke="currentColor" strokeWidth="1.8" />
               <circle cx="12" cy="10" r="2.4" stroke="currentColor" strokeWidth="1.8" />
             </svg>
             {regionLabel}
-          </Button>
-
-          {/* squad override */}
-          <div className="flex shrink-0 items-center gap-[7px]">
-            <span className={MINI_LABEL}>Cuadrillas</span>
-            <Button
-              variant="outline"
-              onClick={() => props.onSetSquadOverride(auto ? squadValue : null)}
-              className={cn(pillClass(!auto), "w-[74px]")}
-            >
-              {auto ? "Auto" : "Manual"}
-            </Button>
-            {/* always mounted so toggling Auto↔Manual doesn't reflow the row; hidden (space reserved) when auto */}
-            <div
-              aria-hidden={auto}
-              className={cn(
-                "flex items-center rounded-lg border border-[var(--line-2)] bg-card",
-                auto && "invisible",
-              )}
-            >
-              <Button variant="ghost" size="icon" onClick={() => props.onSetSquadOverride(Math.max(1, squadValue - 1))} className={STEP_BTN}>
-                −
-              </Button>
-              <div className="min-w-[22px] text-center font-mono text-[12px] font-semibold">{squadValue}</div>
-              <Button variant="ghost" size="icon" onClick={() => props.onSetSquadOverride(Math.min(MAX_SQUADS, squadValue + 1))} className={STEP_BTN}>
-                +
-              </Button>
-            </div>
-          </div>
-
-          {/* cost basis */}
-          <Button variant="outline" onClick={() => togglePop("cost")} className={pillClass(pop === "cost")}>
-            Base de costos
           </Button>
 
           {/* generate */}
@@ -294,7 +204,7 @@ export function AnalysisDock(props: Props) {
               {props.generating ? (
                 <Spinner size={14} className="border-white/50 border-t-white" />
               ) : (
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                <svg width="15" height="15" viewBox="0 -2.5 24 24" fill="none">
                   <path d="M12 3l1.6 4.8L18 9.4l-4.4 1.6L12 16l-1.6-5L6 9.4l4.4-1.6L12 3z" fill="#fff" />
                 </svg>
               )}
@@ -303,7 +213,7 @@ export function AnalysisDock(props: Props) {
           </div>
 
           {/* region popover */}
-          {pop === "region" && (
+          {regionOpen && (
             <Popover>
               <div className={POP_HEADER}>
                 <span className={POP_TITLE}>Alcaldías (INEGI)</span>
@@ -332,40 +242,6 @@ export function AnalysisDock(props: Props) {
                     </Button>
                   );
                 })}
-              </div>
-            </Popover>
-          )}
-
-          {/* cost-basis popover */}
-          {pop === "cost" && (
-            <Popover>
-              <div className={POP_HEADER}>
-                <span className={POP_TITLE}>Costo unitario</span>
-                <span className="text-[9.5px] text-[#aab2bd]">se pasa al módulo</span>
-              </div>
-              <div className="px-[13px] pb-2 pt-[3px]">
-                {props.types
-                  .filter((t) => ACTIVE_ISSUE_TYPES.has(t.slug))
-                  .map((t) => (
-                    <div key={t.slug} className="flex items-center gap-[9px] py-[7px]">
-                      <span className="size-2 shrink-0 rounded-full" style={{ background: typeColor(t.slug) }} />
-                      <span className="flex-1 text-[12px] font-semibold text-[#3a4655]">
-                        {props.typeLabels[t.slug] ?? t.label}
-                      </span>
-                      <div className="flex items-center rounded-[7px] border border-[var(--line-2)] bg-card">
-                        <Button variant="ghost" size="icon" onClick={() => props.onAdjCost(t.slug, -typeStep(t.slug))} className={STEP_BTN}>
-                          −
-                        </Button>
-                        <div className="min-w-[64px] text-center font-mono text-[11px] font-semibold">
-                          {money(props.costs[t.slug] ?? 0)}
-                        </div>
-                        <Button variant="ghost" size="icon" onClick={() => props.onAdjCost(t.slug, typeStep(t.slug))} className={STEP_BTN}>
-                          +
-                        </Button>
-                      </div>
-                      <span className="min-w-[30px] font-mono text-[9px] text-[#b3bac5]">/{typeUnit(t.slug)}</span>
-                    </div>
-                  ))}
               </div>
             </Popover>
           )}

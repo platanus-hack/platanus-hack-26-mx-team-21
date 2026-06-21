@@ -1,0 +1,3 @@
+# Local traffic cache written by `citycrawl-planning warm-traffic` (no secrets, but an artifact)
+.data/
+**/traffic_cache.json

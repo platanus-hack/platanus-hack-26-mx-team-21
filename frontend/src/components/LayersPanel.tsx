@@ -1,5 +1,11 @@
-import type { TypeCount } from "../lib/types";
+import type { DimensionCount, TypeCount } from "../lib/types";
 import { typeColor } from "../lib/types";
+import {
+  DIMENSION_ORDER,
+  DIMENSION_PRESENTATION,
+  dimensionColor,
+  dimensionLabel,
+} from "../lib/dimensions";
 import { Panel } from "@/components/ui/panel";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -7,14 +13,19 @@ import { Separator } from "@/components/ui/separator";
 interface Props {
   types: TypeCount[];
   totalObs: number;
-  roiCount: number;
   showPins: boolean;
-  showRois: boolean;
+  riskMaster: boolean;
+  riskExpanded: boolean;
+  dimensionCounts: DimensionCount[];
+  activeDimensions: Record<string, boolean>;
+  totalRoiCount: number;
   activeTypes: Record<string, boolean>;
   lastSweepLabel: string;
   bottom: number;
   onTogglePins: () => void;
-  onToggleRois: () => void;
+  onToggleRiskMaster: () => void;
+  onToggleRiskExpanded: () => void;
+  onToggleDimension: (dim: string) => void;
   onToggleType: (slug: string) => void;
   onSignOut: () => void;
 }
@@ -67,7 +78,7 @@ export function LayersPanel(props: Props) {
       </div>
 
       {/* body */}
-      <div className="pp-scroll min-h-0 flex-1 overflow-y-auto px-3.5 pb-3.5 pt-3">
+      <div className="pp-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3.5 pb-3.5 pt-3">
         <div className={`${SECTION_LABEL} mb-2`}>Capas</div>
 
         <Button variant="ghost" onClick={props.onTogglePins} className={ROW}>
@@ -76,14 +87,49 @@ export function LayersPanel(props: Props) {
           <span className={COUNT}>{props.totalObs}</span>
         </Button>
 
-        <Button variant="ghost" onClick={props.onToggleRois} className={ROW}>
-          <Indicator on={props.showRois} color="#e5484d" />
+        <Button variant="ghost" onClick={props.onToggleRiskMaster} className={ROW}>
+          <Indicator on={props.riskMaster} color="#e5484d" />
           <span className="flex-1 text-left text-[12.5px] font-semibold">Zonas de riesgo</span>
-          <span className={COUNT}>{props.roiCount}</span>
+          <span className={COUNT}>{props.totalRoiCount}</span>
+          <span
+            role="button"
+            aria-label="Mostrar dimensiones"
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onToggleRiskExpanded();
+            }}
+            className="ml-1 cursor-pointer select-none px-0.5 text-[10px] text-muted-foreground"
+          >
+            {props.riskExpanded ? "▾" : "▸"}
+          </span>
         </Button>
-        <div className="-mt-0.5 mb-0.5 pl-[27px] text-[9.5px] text-[#aab2bd]">
-          externas · crimen, choques, inundación
-        </div>
+
+        {props.riskExpanded &&
+          DIMENSION_ORDER.map((dim) => {
+            const pres = DIMENSION_PRESENTATION[dim];
+            const count = props.dimensionCounts.find((d) => d.dimension === dim)?.count ?? 0;
+            const disabled = !!pres.deferred || count === 0;
+            const on = !disabled && props.riskMaster && !!props.activeDimensions[dim];
+            return (
+              <Button
+                key={dim}
+                variant="ghost"
+                disabled={disabled}
+                onClick={() => props.onToggleDimension(dim)}
+                className={`${ROW} pl-[22px] ${disabled ? "opacity-40" : on ? "opacity-100" : "opacity-55"}`}
+              >
+                <Indicator on={on} color={dimensionColor(dim)} round />
+                <span
+                  className="flex-1 text-left text-[12px] font-semibold"
+                  style={{ color: on ? "#1b2430" : "#a9b1bd" }}
+                >
+                  {dimensionLabel(dim)}
+                  {pres.deferred ? " · próximamente" : ""}
+                </span>
+                <span className="font-mono text-[9.5px] text-[#aab2bd]">{count}</span>
+              </Button>
+            );
+          })}
 
         <Separator className="my-[10px] bg-[var(--line-2)]" />
         <div className={`${SECTION_LABEL} mb-[5px]`}>Tipos de observación</div>

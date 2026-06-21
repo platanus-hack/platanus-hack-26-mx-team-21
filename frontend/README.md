@@ -15,7 +15,7 @@ npm install
 npm run dev                   # http://localhost:5173
 ```
 
-Dev login users are seeded by `supabase/seed/*` (password `vialia-dev-2026!`); see
+Dev login users are seeded by `supabase/seed/*` (password `citycrawl-dev-2026!`); see
 `.env.example` and `supabase/seed/README.md`.
 
 ## Environment variables

@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "@vialia/web",
+      "name": "@citycrawl/web",
       "dependencies": {
         "@supabase/supabase-js": "^2.45.4",
         "@tailwindcss/vite": "^4.3.1",

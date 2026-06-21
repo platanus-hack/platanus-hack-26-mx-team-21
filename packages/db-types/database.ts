@@ -43,7 +43,7 @@ export type Database = {
         Returns: boolean
       }
       app_current_rois: {
-        Args: never
+        Args: { p_dimensions?: string[]; p_limit?: number }
         Returns: {
           centroid_lat: number
           centroid_lng: number
@@ -53,6 +53,15 @@ export type Database = {
           id: string
           risk_dimension: string
           risk_score: number
+          signal_count: number
+        }[]
+      }
+      app_roi_dimension_counts: {
+        Args: never
+        Returns: {
+          max_risk: number
+          risk_dimension: string
+          roi_count: number
         }[]
       }
       app_get_run: { Args: { p_id: string }; Returns: Json }
@@ -76,7 +85,10 @@ export type Database = {
           lat: number
           lng: number
           slug: string
+          source: string
           state: string
+          sweep: string
+          thumb_path: string
           volume: number
           weight: number
           zone: string
@@ -115,6 +127,23 @@ export type Database = {
           is_latent: boolean
           label: string
           slug: string
+        }[]
+      }
+      app_sweep_route: {
+        Args: { p_observation_id: string }
+        Returns: {
+          area_km2: number
+          coverage_geojson: Json
+          ended_at: string
+          obs_count: number
+          origin_lat: number
+          origin_lng: number
+          started_at: string
+          sweep: string
+          video_bucket: string | null
+          video_path: string | null
+          video_duration_ms: number | null
+          video_fps: number | null
         }[]
       }
       app_tenant_boundary: { Args: never; Returns: Json }
