@@ -24,15 +24,21 @@ external-data extract --source ssc_hechos_transito     # → .data/raw + .data/s
 external-data roi-compute --dimension crash            # → .data/staging/rois/current.geojson
 ```
 
-## Run (Supabase)
-Apply migrations `0101–0103` (Supabase MCP or CLI), then:
+## Run (Cloudflare R2 — production / Container)
+Object storage is on Cloudflare R2 (`STORAGE_BACKEND=r2`). In production the pipeline
+runs as the container image (`Dockerfile`) invoked by the Cron worker (`cron/`); see
+`docs/runbooks/r2-cutover.md` and `supabase/STORAGE.md`. Apply migrations `0101–0103`
+(Supabase MCP or CLI) for the DB side, then:
 ```bash
-export STORAGE_BACKEND=supabase DB_URL=... \
-       SUPABASE_S3_ENDPOINT=... SUPABASE_S3_ACCESS_KEY=... SUPABASE_S3_SECRET=...
-external-data extract --all      # raw+staging → external-data bucket
+export STORAGE_BACKEND=r2 DB_URL=... \
+       R2_S3_ENDPOINT=https://<account_id>.r2.cloudflarestorage.com \
+       R2_ACCESS_KEY=... R2_SECRET=...
+external-data extract --all      # raw+staging → R2 external-data bucket
 external-data load-db            # staged signals → priority.external_signals
 external-data roi-compute --all  # → priority.roi_runs + priority.rois
 ```
+> `STORAGE_BACKEND=supabase` (with `SUPABASE_S3_*`) is retained only as the migration
+> rollback path until Supabase Storage is decommissioned (`0211`).
 
 ## Sources (registry/sources.yaml)
 9 sources across 5 toggleable risk dimensions: `crash` (SSC, C5, news), `crime` (FGJ
