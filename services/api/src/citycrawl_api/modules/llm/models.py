@@ -34,3 +34,25 @@ class PlanDraft(_Camel):
     squad_count: int | None = None
     unresolved_terms: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+
+# --- conversational chat contract --------------------------------------------
+# The chat turn carries the full message history plus the draft accumulated so far,
+# so the assistant can answer follow-ups in Spanish and update only what changed.
+
+
+class ChatMessage(_Camel):
+    role: str  # "user" | "assistant"
+    content: str
+
+
+class DraftChatRequest(_Camel):
+    messages: list[ChatMessage]
+    draft: PlanDraft | None = None
+    issue_types: list[IssueTypeChoice] = []
+    regions: list[RegionChoice] = []
+
+
+class DraftChatResponse(_Camel):
+    reply: str
+    draft: PlanDraft
