@@ -1,11 +1,10 @@
 """Real planning engine adapting the ActionableOptimization deliverable.
 
-Pipeline: eligible points (volume>0) → proximity clusters → traffic-weighted criticality
-(weight = total_volume · vehicles_week · free_flow_speed) → cost (2000 + 8000·volume) →
-greedy budget selection (cheapest-first so the tightest budgets still pick up affordable
-trips). Outputs map onto the existing wire contract: a selected proximity cluster is a
-Squad; selected points ranked by weight are top_critical. Implements the PlanningEngine
-protocol; swappable with the mock."""
+Pipeline: eligible points (volume>0) -> proximity clusters -> traffic-weighted criticality
+(weight = total_volume * vehicles_week * free_flow_speed) -> capacity-bounded superclusters
+(= trips) -> cost (2000 + 8000*volume) -> greedy budget selection. Outputs map onto the
+existing wire contract: a selected supercluster is a Squad; selected points ranked by
+weight are top_critical. Implements the PlanningEngine protocol; swappable with the mock."""
 from __future__ import annotations
 
 import math
@@ -27,6 +26,7 @@ from citycrawl_api.modules.planning.optimization.cost import (
     select_within_budget,
     supercluster_cost,
 )
+from citycrawl_api.modules.planning.optimization.superclustering import build_superclusters
 from citycrawl_api.modules.planning.traffic import TrafficProvider
 
 
@@ -76,33 +76,42 @@ class OptimizationPlanningEngine:
             return empty
 
         clusters, centroids, sizes, volumes, weights = self._cluster_weights(eligible)
+        superclusters = build_superclusters(centroids, sizes, self._max_points)
+        if not superclusters:
+            return empty
 
-        # Each proximity cluster maps to one trip (squad). Cost is per-cluster volume.
-        # Selection uses inverted cost as priority so cheapest trips are preferred —
-        # this ensures individually affordable trips are never blocked by a high-cost
-        # trip that happens to have higher criticality weight.
-        sc_costs = [supercluster_cost(v) for v in volumes]
-        inv_costs = [1.0 / c for c in sc_costs]
+        # Per-supercluster aggregates.
+        sc_point_idx: list[list[int]] = []   # flattened original-point indices
+        sc_volume: list[float] = []
+        sc_weight: list[float] = []
+        sc_cost: list[float] = []
+        for cl_idxs in superclusters:
+            pts = [pi for ci in cl_idxs for pi in clusters[ci]]
+            vol = sum(volumes[ci] for ci in cl_idxs)
+            sc_point_idx.append(pts)
+            sc_volume.append(vol)
+            sc_weight.append(sum(weights[ci] for ci in cl_idxs))
+            sc_cost.append(supercluster_cost(vol))
 
-        selected = select_within_budget(inv_costs, sc_costs, request.budget)  # cheapest-first
+        selected = select_within_budget(sc_weight, sc_cost, request.budget)  # desc-weight order
         if not selected:
             return empty
 
-        max_w = max(weights[s] for s in selected) or 1.0
+        max_w = max(sc_weight[s] for s in selected) or 1.0
         squads: list[Squad] = []
         top_critical: list[TopCritical] = []
         rank = 0
         for color_i, s in enumerate(selected):
-            member_pts = [eligible[pi] for pi in clusters[s]]
-            share = sc_costs[s] / len(member_pts)
+            member_pts = [eligible[pi] for pi in sc_point_idx[s]]
+            share = sc_cost[s] / len(member_pts)
             squads.append(Squad(
                 idx=color_i + 1,
                 color=SQUAD_COLORS[color_i % len(SQUAD_COLORS)],
-                weight=weights[s] / max_w,
+                weight=sc_weight[s] / max_w,
                 members=[m.id for m in member_pts],
                 polygon=convex_hull(_latlng(member_pts)),
                 centroid=LatLngModel(**centroid_of(_latlng(member_pts))),
-                cost=sc_costs[s],
+                cost=sc_cost[s],
                 count=len(member_pts),
             ))
             for m in member_pts:
@@ -112,8 +121,8 @@ class OptimizationPlanningEngine:
                     cost=share, zone=m.zone, rank=rank,
                 ))
 
-        spent = sum(sc_costs[s] for s in selected)
-        sel_pts = [eligible[pi] for s in selected for pi in clusters[s]]
+        spent = sum(sc_cost[s] for s in selected)
+        sel_pts = [eligible[pi] for s in selected for pi in sc_point_idx[s]]
         regions = len({p.district_cve for p in sel_pts if p.district_cve})
         volume = sum(p.volume for p in sel_pts)
         budget_pct = min(100, _js_round(spent / request.budget * 100)) if request.budget > 0 else 0
