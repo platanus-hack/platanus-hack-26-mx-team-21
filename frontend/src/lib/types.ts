@@ -69,6 +69,7 @@ export interface Observation {
   districtName: string | null;
   source: string | null; // detector/provenance — "whatsapp-citizen" for citizen reports
   thumbPath: string | null; // R2 path of the ready thumbnail (citizen photo), else null
+  sweep: string | null; // inspection sweep label (e.g. "SWP-6E79") — drives the "Ver recorrido" highlight
 }
 
 export interface ObservationDetail {
@@ -252,4 +253,20 @@ export interface PlanResult {
   topCritical: TopCritical[];
   squads: Squad[];
   stats: PlanStats;
+}
+
+// ---- Real-time observation stream (§realtime listener) ----------------------
+
+// The lean payload broadcast by community.broadcast_observation() on a tenant's
+// private Realtime topic when a new observation becomes visible. Used only for the
+// toast/pulse/locate — pin styling stays authoritative from getObservations().
+export interface ObservationEvent {
+  observation_id: string;
+  slug: string;
+  lat: number;
+  lng: number;
+  sweep_id: string | null;
+  sweep: string | null; // 'SWP-XXXX'
+  zone: string | null;
+  observed_at: string;
 }
