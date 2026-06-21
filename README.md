@@ -21,6 +21,9 @@ street-level video capture, vision models, and external risk datasets into a
 single **priority map** that helps city stakeholders spend their budget where it
 matters most.
 
+<img src="./vision-screen.png" alt="Computer Vision" width="400" />
+
+
 ## Live App
 
 🌐 **[citycrawl.dev](https://citycrawl.dev)**
