@@ -1,5 +1,5 @@
 do $$
-declare v_user uuid; v_tenant uuid;
+declare v_user uuid; v_tenant uuid; v_sweep text;
 begin
   assert to_regprocedure('public.app_authorize_object(text,text)') is not null,
     'app_authorize_object missing';
@@ -27,4 +27,21 @@ begin
   assert public.app_authorize_object('sweep-video', 'sweeps/x/not-a-uuid.mp4') = false,
     'malformed sweep path must be denied';
   assert public.app_authorize_object('tenant-tiles', '') = false, 'empty path must be denied';
+
+  -- POSITIVE sweep-video: a recording referenced by an in-boundary observation of the
+  -- caller's tenant must be authorized. Regression for the app.tenant_id-over-PostgREST
+  -- bug: can_view_observation needs the tenant GUC, which the broker/PostgREST never sets,
+  -- so app_authorize_object must bridge it from the caller's membership. (Same code path
+  -- guards observation-thumbnails; no thumbnail rows are seeded to assert that branch.)
+  select r.storage_path into v_sweep
+  from vision.recordings r
+  join vision.observations o on o.recording_id = r.id
+  join geo.tenant_boundary_versions b on b.tenant_id = v_tenant and b.status = 'active'
+  where r.storage_bucket = 'sweep-video'
+    and ST_Contains(b.materialized_geometry, o.location::geometry)
+  limit 1;
+  if v_sweep is not null then
+    assert public.app_authorize_object('sweep-video', v_sweep) = true,
+      'member must be allowed on an in-boundary sweep recording (tenant GUC bridge)';
+  end if;
 end $$;

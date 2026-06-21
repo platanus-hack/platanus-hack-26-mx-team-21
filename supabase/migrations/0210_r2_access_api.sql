@@ -4,7 +4,7 @@
 create or replace function public.app_authorize_object(p_bucket text, p_path text)
 returns boolean
 language plpgsql
-stable
+volatile  -- sets the app.tenant_id GUC (transaction-local) before delegating
 security definer
 set search_path = ''
 as $$
@@ -16,6 +16,19 @@ begin
   if coalesce(p_path, '') = '' then
     return false;
   end if;
+
+  -- PostgREST sets request.jwt.claims (so auth.uid() works) but NOT the app.tenant_id
+  -- GUC that platform.active_tenant_id()/can_view_observation depend on. Bridge it from
+  -- the caller's membership (analysis_author preferred, else viewer), transaction-local,
+  -- so the observation-thumbnails/sweep-video branches authorize legitimate members.
+  perform set_config('app.tenant_id', coalesce((
+    select m.tenant_id::text
+    from platform.tenant_memberships m
+    join platform.oidc_subjects s on s.id = m.subject_id
+    where s.user_id = auth.uid()
+    order by case when m.role = 'analysis_author' then 0 else 1 end
+    limit 1
+  ), ''), true);
 
   if p_bucket = 'tenant-tiles' then
     -- {tenant_id}/{boundary_version_id}/{data_version}/...
