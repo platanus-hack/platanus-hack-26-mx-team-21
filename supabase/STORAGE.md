@@ -148,11 +148,13 @@ When you (or the app's runtime agents) deal with stored objects:
 
 - **Buckets are R2 IaC.** Create or modify a bucket in `services/broker/wrangler.toml` (the source of truth for R2 buckets), not in SQL. Example:
   ```toml
-  [[env.production.r2_buckets]]
+  [[r2_buckets]]
   binding = "SWEEP_VIDEO"
   bucket_name = "sweep-video"
-  jurisdiction = "eu"
   ```
+  (Buckets are created in the default jurisdiction — `wrangler r2 bucket create
+  sweep-video`. Only set `jurisdiction` here if the bucket was created with one;
+  a mismatch makes the binding resolve to the wrong/no bucket.)
 - **Keep DDL defaults in sync.** Tables carry the bucket id as a column default (`recordings.storage_bucket`, etc.). If you rename a bucket, update the default and write a backfill — the unique `(storage_bucket, storage_path)` constraints assume they match.
 - **Broker credentials.** The broker Worker reads R2 credentials from its `wrangler.toml` bindings. The external-data service reads its own `R2_S3_*` keys. Neither secret may reach a client.
 - **Path templates are contracts.** Agents rely on exact path layouts for lineage and cache keys. Diverging breaks downstream systems.
