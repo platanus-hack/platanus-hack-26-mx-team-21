@@ -1,8 +1,5 @@
 project_id = "joixzhdpnxqhnuscxsoy"
 
-[storage]
-file_size_limit = "5GiB"
-
 [db.seed]
 enabled = true
 sql_paths = ["./seed/*.sql"]
