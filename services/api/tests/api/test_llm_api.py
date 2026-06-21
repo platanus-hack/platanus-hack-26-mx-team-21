@@ -57,3 +57,4 @@ def test_chat_returns_reply_and_draft(app, client):
     assert body["draft"]["budget"] == 2_000_000
     assert body["draft"]["regionFilter"] == ["005"]
     assert body["draft"]["squadCount"] == 3
+    assert body["generate"] is False  # defaults false unless the model asks to run

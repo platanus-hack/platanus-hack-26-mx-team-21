@@ -78,7 +78,7 @@ export function LayersPanel(props: Props) {
       </div>
 
       {/* body */}
-      <div className="pp-scroll min-h-0 flex-1 overflow-y-auto px-3.5 pb-3.5 pt-3">
+      <div className="pp-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3.5 pb-3.5 pt-3">
         <div className={`${SECTION_LABEL} mb-2`}>Capas</div>
 
         <Button variant="ghost" onClick={props.onTogglePins} className={ROW}>

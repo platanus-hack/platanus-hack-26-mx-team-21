@@ -228,9 +228,12 @@ export interface ChatMessage {
 }
 
 // Response from /v1/llm/chat: the assistant's Spanish reply plus the full, merged draft.
+// `generate` is true only when the user asked to run the plan now — the frontend then
+// triggers optimization and opens the plan preview.
 export interface DraftChatResponse {
   reply: string;
   draft: PlanDraft;
+  generate: boolean;
 }
 
 export interface TopCritical {

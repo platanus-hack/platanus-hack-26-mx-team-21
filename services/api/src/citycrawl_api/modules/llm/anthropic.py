@@ -17,11 +17,10 @@ from citycrawl_api.modules.llm.models import (
 
 logger = get_logger("citycrawl_api.llm")
 
+# Only the parameters the user actually controls are parsed: the budget and the regions
+# (alcaldías). Issue type and squad count are not asked for — type is fixed and squad count
+# is ignored by the optimization engine.
 _DRAFT_PROPERTIES: dict[str, Any] = {
-    "issueType": {
-        "type": ["string", "null"],
-        "description": "Slug of the recognized issue type, or null.",
-    },
     "budget": {
         "type": ["number", "null"],
         "description": "Budget in MXN as a number, or null if not stated.",
@@ -31,14 +30,10 @@ _DRAFT_PROPERTIES: dict[str, Any] = {
         "items": {"type": "string"},
         "description": "INEGI cve_mun codes for recognized regions; [] for all.",
     },
-    "squadCount": {
-        "type": ["integer", "null"],
-        "description": "Number of squads/crews requested, or null.",
-    },
     "unresolvedTerms": {
         "type": "array",
         "items": {"type": "string"},
-        "description": "Phrases referencing a type/region that could not be mapped.",
+        "description": "Phrases referencing a region that could not be mapped.",
     },
     "warnings": {
         "type": "array",
@@ -73,24 +68,32 @@ _CHAT_TOOL: dict[str, Any] = {
                     "understood or ask the next concrete question."
                 ),
             },
+            "generate": {
+                "type": "boolean",
+                "description": (
+                    "True ONLY when the user asks to run/generate the plan now (e.g. "
+                    "'genéralo', 'ya', 'hazlo', 'muéstrame el plan') and at least an issue "
+                    "type is set. False while still gathering parameters."
+                ),
+            },
             **_DRAFT_PROPERTIES,
         },
-        "required": ["reply", "regionFilter", "unresolvedTerms", "warnings"],
+        "required": ["reply", "generate", "regionFilter", "unresolvedTerms", "warnings"],
         "additionalProperties": False,
     },
 }
 
 
 def _system_prompt(request: DraftParseRequest) -> str:
-    types = "\n".join(f"- {c.slug}: {c.label}" for c in request.issue_types) or "- (none)"
     regions = "\n".join(f"- {c.cve}: {c.name}" for c in request.regions) or "- (none)"
     return (
         "You parse a Spanish or English city-maintenance planning request into a structured "
-        "draft. Only use issue-type slugs and region codes from the lists below; never invent "
-        "codes. If the user references a type or region not in the lists, leave the field null "
-        "or omit it and add the phrase to unresolvedTerms. Budget is a plain number in MXN "
-        "(e.g. '2 millones' -> 2000000). Do not infer cost overrides.\n\n"
-        f"Issue types:\n{types}\n\nRegions (cve_mun: name):\n{regions}"
+        "draft with two parameters: budget and regions. Only use region codes from the list "
+        "below; never invent codes. If the user references a region not in the list, leave it "
+        "out and add the phrase to unresolvedTerms. Budget is a plain number in MXN "
+        "(e.g. '2 millones' -> 2000000). Do not infer issue type, squad count, or cost "
+        "overrides.\n\n"
+        f"Regions (cve_mun: name):\n{regions}"
     )
 
 
@@ -121,6 +124,9 @@ def _chat_system_prompt(request: DraftChatRequest) -> str:
         "- Si falta información para un plan útil, pregunta de forma concreta "
         "(p. ej. «¿Qué presupuesto y cuántas cuadrillas?»).\n"
         "- En «reply» escribe tu respuesta conversacional para el usuario.\n"
+        "- Pon generate=true SOLO cuando el usuario pida ejecutar/generar el plan ahora "
+        "(p. ej. «genéralo», «ya», «hazlo», «muéstrame el plan») y haya al menos un tipo de "
+        "problema; en cualquier otro turno pon generate=false.\n"
         "- Llama SIEMPRE a la herramienta emit_chat_turn.\n\n"
         f"Borrador actual:\n{_draft_state(request.draft)}\n\n"
         f"Tipos de problema:\n{types}\n\nRegiones (cve_mun: nombre):\n{regions}"
@@ -204,11 +210,12 @@ class AnthropicDraftParser:
         reply = payload.pop("reply", None)
         if not isinstance(reply, str) or not reply.strip():
             raise upstream_bad_gateway("llm_invalid_output", "LLM returned no reply")
+        generate = bool(payload.pop("generate", False))
         try:
             draft = PlanDraft.model_validate(payload)
         except Exception:
             raise upstream_bad_gateway("llm_invalid_output", "LLM returned an invalid draft")
-        return DraftChatResponse(reply=reply, draft=draft)
+        return DraftChatResponse(reply=reply, draft=draft, generate=generate)
 
 
 def _extract_tool_input(message: Any, name: str) -> dict[str, Any] | None:

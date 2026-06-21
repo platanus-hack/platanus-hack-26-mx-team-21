@@ -81,6 +81,28 @@ def test_chat_returns_reply_and_draft():
     assert res.draft.squad_count == 3
 
 
+def test_chat_generate_flag_passthrough():
+    parser = _parser([_chat_block({
+        "reply": "Genero el plan.",
+        "generate": True,
+        "regionFilter": [], "unresolvedTerms": [], "warnings": [],
+        "issueType": "pothole", "budget": 2000000,
+    })])
+    res = asyncio.run(parser.chat(_chat_req()))
+    assert res.generate is True
+    assert res.draft.issue_type == "pothole"
+
+
+def test_chat_generate_defaults_false_when_absent():
+    parser = _parser([_chat_block({
+        "reply": "Te armé un borrador, ¿lo genero?",
+        "regionFilter": [], "unresolvedTerms": [], "warnings": [],
+        "issueType": "pothole",
+    })])
+    res = asyncio.run(parser.chat(_chat_req()))
+    assert res.generate is False
+
+
 def test_chat_missing_reply_rejected():
     parser = _parser([_chat_block({"regionFilter": [], "unresolvedTerms": [], "warnings": []})])
     with pytest.raises(ApiError) as ei:

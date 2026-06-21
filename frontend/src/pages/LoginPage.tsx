@@ -3,7 +3,7 @@ import { useAuth } from "../lib/auth";
 
 export function LoginPage() {
   const { signIn } = useAuth();
-  const [email, setEmail] = useState("author.a@vialia.test");
+  const [email, setEmail] = useState("author.a@citycrawl.test");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -176,9 +176,9 @@ export function LoginPage() {
               paddingTop: 12,
             }}
           >
-            Demo · author.a@vialia.test
+            Demo · author.a@citycrawl.test
             <br />
-            contraseña: vialia-dev-2026!
+            contraseña: citycrawl-dev-2026!
           </div>
         </form>
       </div>

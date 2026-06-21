@@ -1,6 +1,6 @@
 # Seed data
 
-Deterministic test dataset for the "Vialia" City Priority Map app. Files apply in filename
+Deterministic test dataset for the "CityCrawl" City Priority Map app. Files apply in filename
 order (wired via `config.toml` `[db.seed].sql_paths`):
 
 ```
@@ -24,15 +24,15 @@ psql "$DBURL" -v ON_ERROR_STOP=1 -f supabase/seed/verify.sql
 each fixture's SQL is applied with MCP `execute_sql` in the same order, then `verify.sql` is run
 the same way. See `.superpowers/sdd/progress.md` for the as-run log.
 
-## Dev login users (password for all: `vialia-dev-2026!`)
+## Dev login users (password for all: `citycrawl-dev-2026!`)
 
 | email | role | purpose |
 |---|---|---|
-| `author.a@vialia.test` | analysis_author | full app |
-| `viewer.a@vialia.test` | viewer | read-only |
-| `nomember@vialia.test` | (none) | no-membership empty state |
+| `author.a@citycrawl.test` | analysis_author | full app |
+| `viewer.a@citycrawl.test` | viewer | read-only |
+| `nomember@citycrawl.test` | (none) | no-membership empty state |
 
-Tenant: **Vialia CDMX**. Active boundary = 6 alcaldías (Cuauhtémoc, Iztapalapa, Coyoacán, GAM,
+Tenant: **CityCrawl CDMX**. Active boundary = 6 alcaldías (Cuauhtémoc, Iztapalapa, Coyoacán, GAM,
 Álvaro Obregón, V. Carranza); **Tlalpan is excluded** so its ~10 observations test the geo-clip.
 
 ## Notes

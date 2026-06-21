@@ -13,7 +13,7 @@ auth.users (id)
 ```
 
 Tenants: `select id, name from platform.tenants;`
-(e.g. **Vialia CDMX** = `a0000000-0000-0000-0000-000000000001`).
+(e.g. **CityCrawl CDMX** = `a0000000-0000-0000-0000-000000000001`).
 Roles in use: `analysis_author` (full app), `viewer` (read-only).
 
 ## One-shot insert

@@ -493,26 +493,50 @@ export function MapPage() {
   // the model only changes what the user asks for.
   const draftRef = useRef<PlanDraft | null>(null);
 
-  // Conversational agent turn — sends the full message history plus the draft so far, applies
-  // the merged draft to the dock for review, and returns the assistant's Spanish reply. It
-  // never starts optimization.
+  // Conversational agent turn — sends the full message history plus the draft so far and
+  // applies the merged draft to the dock. When the model reports generate=true (the user
+  // asked to run it) and a runnable issue type is set, it also triggers the plan and opens
+  // the preview. Returns the assistant's Spanish reply.
   const onChat = useCallback(
     async (messages: ChatMessage[]): Promise<string> => {
       const res: DraftChatResponse = await chatDraft(messages, draftRef.current, types, regions);
       const draft = res.draft;
       draftRef.current = draft;
-      if (draft.issueType && ACTIVE_ISSUE_TYPES.has(draft.issueType)) setIssueType(draft.issueType);
-      if (typeof draft.budget === "number" && draft.budget > 0)
-        setBudget(Math.min(BUDGET_MAX, Math.max(BUDGET_MIN, draft.budget)));
-      if (Array.isArray(draft.regionFilter)) {
-        const valid = new Set(regions.map((r) => r.cve));
-        setRegionFilter(draft.regionFilter.filter((c) => valid.has(c)));
-      }
-      if (typeof draft.squadCount === "number") setSquadOverride(draft.squadCount);
+
+      // Resolve the draft into a concrete config, falling back to current dock state for any
+      // field this turn didn't set. Held as locals so a generate turn can run the plan now
+      // without waiting for the setState calls below to flush.
+      const nextIssue =
+        draft.issueType && ACTIVE_ISSUE_TYPES.has(draft.issueType) ? draft.issueType : issueType;
+      const nextBudget =
+        typeof draft.budget === "number" && draft.budget > 0
+          ? Math.min(BUDGET_MAX, Math.max(BUDGET_MIN, draft.budget))
+          : budget;
+      const validCves = new Set(regions.map((r) => r.cve));
+      const nextRegions = Array.isArray(draft.regionFilter)
+        ? draft.regionFilter.filter((c) => validCves.has(c))
+        : regionFilter;
+      const nextSquad = typeof draft.squadCount === "number" ? draft.squadCount : squadOverride;
+
+      setIssueType(nextIssue);
+      setBudget(nextBudget);
+      setRegionFilter(nextRegions);
+      setSquadOverride(nextSquad);
       setDockOpen(true);
+
+      // Trigger optimization only on an explicit generate intent with a runnable issue type;
+      // fire-and-forget so the reply bubble renders before the preview takes over.
+      if (res.generate && draft.issueType && ACTIVE_ISSUE_TYPES.has(draft.issueType)) {
+        void startPlan({
+          issueType: nextIssue,
+          budget: nextBudget,
+          regionFilter: nextRegions,
+          squadOverride: nextSquad,
+        });
+      }
       return res.reply;
     },
-    [types, regions],
+    [types, regions, issueType, budget, regionFilter, squadOverride, startPlan],
   );
 
   // ---- quick-action chips -------------------------------------------------

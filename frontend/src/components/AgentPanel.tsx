@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { ChatMessage, PlanResult } from "../lib/types";
 import { typeUnit } from "../lib/types";
 import { money } from "../lib/money";
@@ -359,9 +361,26 @@ function Bubble({ role, children }: { role: "user" | "assistant"; children: Reac
   return (
     <div className="flex gap-[9px]">
       <div className="mt-px size-[22px] shrink-0 rounded-[7px] bg-[linear-gradient(135deg,var(--acc,#2f64e6),#6a4cf0)]" />
-      <div className="max-w-[82%] whitespace-pre-wrap rounded-[12px] rounded-tl-[4px] border border-[var(--line-2)] bg-[#fbfcfe] px-3 py-2 text-[12.5px] leading-[1.5] text-[#3a4655]">
-        {children}
+      <div className="max-w-[82%] rounded-[12px] rounded-tl-[4px] border border-[var(--line-2)] bg-[#fbfcfe] px-3 py-2 text-[12.5px] leading-[1.5] text-[#3a4655]">
+        {typeof children === "string" ? <ChatMarkdown text={children} /> : children}
       </div>
+    </div>
+  );
+}
+
+// Compact markdown renderer for assistant replies. Element styles are tuned to the bubble's
+// 12.5px / 1.5 type scale so lists, emphasis, and code stay legible without a typography plugin.
+function ChatMarkdown({ text }: { text: string }) {
+  return (
+    <div className="space-y-1.5 break-words [&_a]:text-[var(--acc,#2f64e6)] [&_a]:underline [&_code]:rounded [&_code]:bg-[#eef1f6] [&_code]:px-1 [&_code]:py-px [&_code]:font-mono [&_code]:text-[11px] [&_li]:my-0.5 [&_ol]:list-decimal [&_ol]:pl-4 [&_p]:whitespace-pre-wrap [&_strong]:font-semibold [&_strong]:text-[#1b2430] [&_ul]:list-disc [&_ul]:pl-4">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          a: ({ node, ...props }) => <a target="_blank" rel="noreferrer" {...props} />,
+        }}
+      >
+        {text}
+      </ReactMarkdown>
     </div>
   );
 }

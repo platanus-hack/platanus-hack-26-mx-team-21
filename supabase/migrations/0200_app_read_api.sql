@@ -1,5 +1,5 @@
 -- 0200_app_read_api.sql
--- Public, security-definer read API for the Vialia map web client.
+-- Public, security-definer read API for the CityCrawl map web client.
 --
 -- WHY THIS LAYER EXISTS: the browser authenticates as the `authenticated` role,
 -- which has NO usage/select on the custom schemas (vision/priority/geo/analysis/platform)

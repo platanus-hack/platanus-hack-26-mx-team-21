@@ -56,3 +56,5 @@ class DraftChatRequest(_Camel):
 class DraftChatResponse(_Camel):
     reply: str
     draft: PlanDraft
+    # True only when the user asked to run the plan now; the frontend triggers optimization.
+    generate: bool = False
