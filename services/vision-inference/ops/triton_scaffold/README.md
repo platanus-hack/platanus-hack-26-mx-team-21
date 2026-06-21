@@ -10,7 +10,7 @@ inference_anomalies/
 ├── proto/anomaly.proto        # gRPC contract (stream of frames -> results)
 ├── triton/model_repository/anomaly_detector/   # every-frame detector (python backend)
 │   ├── config.pbtxt
-│   └── 1/model.py             # pablo_v1 YOLO-seg + Segformer floor gate
+│   └── 1/model.py             # YOLO26-seg (our fine-tune) + Segformer floor gate
 ├── orchestrator/              # the cascade brain (gRPC server)
 │   ├── server.py              # detector inline + async VLM on new events
 │   ├── cascade.py             # event dedup → VLM at most once per pothole
@@ -34,7 +34,7 @@ cd inference_anomalies && bash scripts/gen_proto.sh
 2) **Start the detector (Triton)** — serves `anomaly_detector` over gRPC :8001.
 The python backend needs `ultralytics`+`transformers` in Triton's env; simplest is to run it
 inside our `road-anomaly-zero-shot:moe` image, or build a custom Triton image. Models are
-mounted from `../models` (pablo_v1 + segformer-cityscapes).
+mounted from `../models` (YOLO26-seg weights + segformer-cityscapes).
 
 3) **Start Qwen (vLLM)** — OpenAI API on :8000:
 ```bash

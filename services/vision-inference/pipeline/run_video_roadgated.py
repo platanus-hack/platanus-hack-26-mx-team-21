@@ -1,7 +1,7 @@
-"""pablo_v1 pothole segmentation + floor(road) detection gating on a generic video.
+"""YOLO26-seg pothole segmentation + floor(road) detection gating on a generic video.
 
 Extracts frames at --fps, computes a Segformer (Cityscapes) road/floor mask per frame,
-runs pablo_v1 pothole segmentation, and keeps a detection only if >= --road-frac of its
+runs our YOLO26-seg pothole model, and keeps a detection only if >= --road-frac of its
 box overlaps floor pixels. Renders the floor tinted pink (kept = red box, dropped = grey),
 builds an annotated mp4 + a best-parts montage of kept-detection frames.
 
@@ -28,7 +28,7 @@ import run_available_models as ram  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "outputs" / "video_analysis"
-YOLO_MODEL = ROOT / "models" / "pablo_v1" / "pablo_v1.pt"
+YOLO_MODEL = ROOT / "models" / "pablo_v1" / "pablo_v1.pt"   # YOLO26-seg weights (legacy filename)
 SEG_MODEL = ROOT / "models" / "segformer-cityscapes"
 ROAD_CLASS = 0
 
