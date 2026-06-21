@@ -1,6 +1,41 @@
-/* CityCrawl global styles — ported from the reference design. */
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "./design-system/tokens.css";
+
+/* Map shadcn semantic theme keys onto our tokens (Tailwind v4 CSS-first). */
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--ink);
+  --color-card: var(--card);
+  --color-card-foreground: var(--ink);
+  --color-popover: var(--card);
+  --color-popover-foreground: var(--ink);
+  --color-primary: var(--brand);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: var(--surface-2);
+  --color-secondary-foreground: var(--ink);
+  --color-muted: var(--surface-2);
+  --color-muted-foreground: var(--muted-ink);
+  --color-accent: var(--surface-2);
+  --color-accent-foreground: var(--ink);
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: #ffffff;
+  --color-border: var(--line);
+  --color-input: var(--line);
+  --color-ring: var(--brand);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 2px);
+
+  --font-sans: var(--font-display);
+  --font-mono: var(--font-mono);
+}
+
+/* ===== preserved globals — feature components depend on these, do not remove ===== */
 :root {
-  --acc: #2f64e6;
+  --acc: var(--brand);
 }
 * {
   box-sizing: border-box;
