@@ -72,7 +72,7 @@ adapter probes newest-first and falls back to the CKAN-linked URL, auto-picking 
 ## 3. Architecture — three stages
 
 ```
-STAGE 1  EXTRACT      adapters → raw + staging signals in Supabase Storage  ("objects")
+STAGE 1  EXTRACT      adapters → raw + staging signals in R2 `external-data` bucket  ("objects")
                       → load normalized rows into external_signals (PostGIS)
 STAGE 2  COMPUTE ROIs per risk dimension: cluster weighted points (ST_ClusterDBSCAN)
                       → polygon (concave hull + buffer) → risk semantics + description
@@ -80,13 +80,15 @@ STAGE 3  PERSIST      insert rois (current), supersede prior current ROIs for th
                       dimensions; keep history → current_rois view, time-travel
 ```
 
-**Stack:** Python 3.11 · `httpx` · `pyarrow`/`pandas` · `fsspec`+`s3fs` (Supabase Storage;
+**Stack:** Python 3.11 · `httpx` · `pyarrow`/`pandas` · `fsspec`+`s3fs` (Cloudflare R2 via S3 API;
 local FS in dev) · `pydantic` · `typer` (CLI) · `psycopg` (PostGIS) · Claude (news extraction,
 ROI description, geocode fallback) · `pytest`.
 
-**Storage decision (mine to make):**
-- **Supabase Storage** — raw zone (exact bytes + manifest) + staging Parquet. These are the
-  *objects* ROIs reference.
+**Storage decision:**
+- **Cloudflare R2 `external-data` bucket** (`STORAGE_BACKEND=r2`) — raw zone (exact bytes + manifest,
+  path layout `raw/{source_id}/{stamp}/…`) + staging Parquet. These are the *objects* ROIs reference.
+  The pipeline writes via the S3 API (`fsspec`+`s3fs`); no Supabase Storage, no service-role URL minting.
+  See `supabase/STORAGE.md` for bucket IaC details.
 - **Supabase Postgres + PostGIS** — `external_signals` (clustering input, rebuildable),
   `roi_runs`, `rois` (the product), `current_rois` view. This is the strict-requirement DB.
 
@@ -122,7 +124,7 @@ explainable; no extra extension needed. Per dimension, over the current signal s
    signal timing/signage; road_surface → pavement; crime → lighting/visibility). Templated,
    LLM-polished.
 6. Record **object references**: `contributing_signal_ids[]` and `source_object_refs[]`
-   (Supabase Storage handles of the underlying raw/staging objects).
+   (R2 `external-data` bucket paths of the underlying raw/staging objects, e.g. `raw/{source_id}/{stamp}/…`).
 
 Alternative considered: H3 hexbin (res 9–10) — fixed grid, needs the `h3` extension; kept as a
 fallback if a grid is preferred over density clusters.
@@ -149,7 +151,7 @@ CREATE TABLE external_signals (
     severity_weight    REAL NOT NULL DEFAULT 1,
     geocode_confidence REAL,
     attributes         JSONB NOT NULL DEFAULT '{}',
-    source_object_ref  TEXT,                        -- storage path to the raw/staging object
+    source_object_ref  TEXT,                        -- R2 path to the raw/staging object (e.g. raw/{source_id}/{stamp}/…)
     source_url         TEXT,
     license            TEXT,
     fetched_at         TIMESTAMPTZ,
@@ -186,7 +188,7 @@ CREATE TABLE rois (
     recency_score    REAL,
     description      TEXT NOT NULL,                 -- generated VLM/analysis context
     contributing_signal_ids TEXT[] NOT NULL,        -- object references (signals)
-    source_object_refs      TEXT[] NOT NULL,        -- object references (storage handles)
+    source_object_refs      TEXT[] NOT NULL,        -- R2 `external-data` bucket paths of contributing raw/staging objects
     valid_from       TIMESTAMPTZ NOT NULL DEFAULT now(),
     valid_to         TIMESTAMPTZ,                   -- set on supersession (NULL = current)
     superseded_by_run_id UUID REFERENCES roi_runs(id),
@@ -231,8 +233,8 @@ Time-travel ("ROIs as of date X") falls out of `valid_from/valid_to`, same as ob
   monthly; ROI recompute triggered after any dimension's signals change. Scheduler-agnostic CLI.
 - **Resilience:** per-source isolation; retries w/ backoff; bad coords quarantined; out-of-CDMX
   bbox drop (SSC has stray coords).
-- **Secrets (env):** `SUPABASE_DB_URL`, `SUPABASE_S3_ENDPOINT`, `SUPABASE_S3_ACCESS_KEY/SECRET`,
-  `EXTERNAL_DATA_BUCKET`, `ANTHROPIC_API_KEY`, `NOMINATIM_BASE_URL`; `STORAGE_BACKEND=local|supabase`.
+- **Secrets (env):** `SUPABASE_DB_URL`, `R2_S3_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`,
+  `EXTERNAL_DATA_BUCKET` (= `external-data`), `ANTHROPIC_API_KEY`, `NOMINATIM_BASE_URL`; `STORAGE_BACKEND=local|r2`.
 - **ToS:** open data is CC-BY-4.0 (attribute); news = RSS/sitemap + robots.txt, store extracted
   facts + link only.
 
@@ -263,7 +265,7 @@ Latent Issue Detection depend on.
 | Recency-decay weight + supersession | Two complementary time-sensitivity levers | Hard cutoff by date only |
 | Logical supersession by run/dimension | "Current, superseded on recompute" + history/time-travel | Hard delete / overwrite |
 | ROI stores object refs + description | The required analysis-context linkage | Geometry-only ROIs |
-| Storage: Supabase (Storage objects + PostGIS ROIs) | Uses the chosen stack; ROIs need a spatial DB | Files-only (can't satisfy "in a database") |
+| Storage: Cloudflare R2 (raw/staging objects) + Supabase PostGIS (ROIs) | R2 is the byte sink (`STORAGE_BACKEND=r2`); ROIs need a spatial DB; see `supabase/STORAGE.md` | Files-only (can't satisfy "in a database"); Supabase Storage (replaced by R2) |
 
 ## 12. Integration with the application data model (parallel agent)
 
@@ -279,8 +281,9 @@ This pipeline builds *on top of* that schema; it does not create or modify their
   `priority.rois`, view `priority.current_rois`. The README couples external signals to the
   Priority Engine and ROIs to latent detection, so `priority` is the right home and **no
   "missing schema" wait is required.**
-- **Storage:** add one private bucket **`external-data`** (raw + staging objects), following
-  the parallel agent's private-bucket + membership-scoped-policy pattern.
+- **Storage:** the `external-data` private bucket already exists on Cloudflare R2 (provisioned as
+  IaC in `services/broker/wrangler.toml`); no `storage.buckets` SQL entry or Supabase Storage RLS
+  needed. See `supabase/STORAGE.md`.
 - **Conventions matched (from their migrations):** `id uuid primary key default
   gen_random_uuid()`; `text` + `check (... in (...))` enums; `timestamptz` with
   `default now()`; PostGIS `geography`/`geometry` + GIST indexes; security-definer functions
@@ -289,16 +292,17 @@ This pipeline builds *on top of* that schema; it does not create or modify their
   CLI/Docker**. Migrations and SQL assertion tests are therefore **authored as files** under
   `supabase/migrations/` (numbered **`0101+`** to avoid the reserved `0003`–`0014` band) and
   `supabase/tests/`, to be **applied + verified by the DB-capable agent** via the Supabase
-  MCP. The Python pipeline runs independently with a **local-FS storage backend in dev** and
-  switches to Supabase Storage/Postgres once the migrations are applied.
+  MCP. The Python pipeline runs independently with a **local-FS storage backend in dev**
+  (`STORAGE_BACKEND=local`) and switches to R2 (`STORAGE_BACKEND=r2`) + Postgres once the
+  migrations are applied and R2 credentials are available.
 - **Writes:** the pipeline writes via the **service role** (bypasses RLS). Tenant-scoped
   *read* policy for ROIs (geo-clip like observations) is deferred to coordinate with the DB
   agent; ROIs are global risk data, clipped per tenant at read time downstream.
 
 ## 13. Open items
 - Validate per-outlet **RSS/sitemap URLs** (registry entries) at build time.
-- Confirm Supabase **S3 endpoint/credentials** for the target project; whether `h3` ext is
-  available if we ever want the grid fallback.
+- Confirm **R2 S3 endpoint/credentials** (`R2_S3_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`)
+  for the pipeline deployment; whether `h3` ext is available if we ever want the grid fallback.
 - Per-dimension `eps`/`minpoints` and the `severity`/`half_life` tables — tune on real data.
 - `infracciones`/`0311` subset filters (moving violations; baches vs agua) — finalize at build.
 - ROI ↔ recording linkage (for the VLM step) is consumed downstream by Latent Issue Detection;

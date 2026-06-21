@@ -1,5 +1,7 @@
 # Application Data Model — Supabase Implementation Design
 
+> **⚠️ Superseded (storage):** The object-storage portions of this document describe the original **Supabase Storage** implementation, which has since been migrated to **Cloudflare R2** with a Postgres-mediated access broker (no Supabase signed URLs, no `storage.buckets`, no Storage-RLS). For the current storage contract see [`supabase/STORAGE.md`](../../../supabase/STORAGE.md) and the migration docs (`docs/superpowers/specs/2026-06-20-cloudflare-migration-design.md`, `docs/superpowers/plans/2026-06-20-cloudflare-storage-broker-migration.md`). All non-storage content below remains accurate.
+
 **Date:** 2026-06-20
 **Status:** Approved design
 **Component:** Physical realization of the application data model on Supabase, the

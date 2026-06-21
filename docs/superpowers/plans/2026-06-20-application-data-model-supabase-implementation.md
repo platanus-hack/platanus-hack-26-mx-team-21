@@ -1,5 +1,7 @@
 # Application Data Model — Supabase Implementation Plan
 
+> **⚠️ Superseded (storage):** The object-storage portions of this document describe the original **Supabase Storage** implementation, which has since been migrated to **Cloudflare R2** with a Postgres-mediated access broker (no Supabase signed URLs, no `storage.buckets`, no Storage-RLS). For the current storage contract see [`supabase/STORAGE.md`](../../../supabase/STORAGE.md) and the migration docs (`docs/superpowers/specs/2026-06-20-cloudflare-migration-design.md`, `docs/superpowers/plans/2026-06-20-cloudflare-storage-broker-migration.md`). All non-storage content below remains accurate.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the entire application data model — all five domains plus shared media/video, the cached geo-clip read model, RLS, object storage, and the async queue — as reproducible Supabase CLI migrations.
