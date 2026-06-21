@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { money } from "../lib/money";
 import {
   ACTIVE_ISSUE_TYPES,
@@ -24,7 +24,11 @@ interface Props {
   typeLabels: Record<string, string>;
   pointCount: number;
   previewing: boolean;
+  generating?: boolean;
+  planError?: string | null;
   hasHistory: boolean;
+  open: boolean;
+  onToggleOpen: () => void;
   onSetIssueType: (slug: string) => void;
   onBudget: (v: number) => void;
   onToggleRegion: (cve: string) => void;
@@ -33,11 +37,41 @@ interface Props {
   onAdjCost: (slug: string, delta: number) => void;
   onGenerate: () => void;
   onToggleHistory: () => void;
+  onHeight?: (h: number) => void;
 }
 
 export function AnalysisDock(props: Props) {
   const [pop, setPop] = useState<"region" | "cost" | null>(null);
   const togglePop = (p: "region" | "cost") => setPop((cur) => (cur === p ? null : p));
+
+  // Cross-fade between launcher and full dock. Both stay mounted for the duration of
+  // the transition so there's never an empty frame (no flash). `anim` drives which
+  // keyframe the dock plays; once it clears, only one of the two is rendered.
+  const [anim, setAnim] = useState<"in" | "out" | null>(null);
+  const prevOpen = useRef(props.open);
+  useEffect(() => {
+    if (prevOpen.current === props.open) return;
+    prevOpen.current = props.open;
+    setPop(null);
+    setAnim(props.open ? "in" : "out");
+    const t = setTimeout(() => setAnim(null), 200);
+    return () => clearTimeout(t);
+  }, [props.open]);
+
+  const showDock = props.open || anim === "out";
+  const showLauncher = !props.open || anim === "in";
+
+  // Report the dock's rendered height so sibling panels can sit a consistent gap above it.
+  const dockRef = useRef<HTMLDivElement>(null);
+  const onHeight = props.onHeight;
+  useEffect(() => {
+    const el = dockRef.current;
+    if (!el || !onHeight) return;
+    onHeight(el.offsetHeight);
+    const ro = new ResizeObserver(() => onHeight(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [onHeight, showDock]);
 
   const regionLabel =
     props.regionFilter.length === 0
@@ -47,7 +81,28 @@ export function AnalysisDock(props: Props) {
   const auto = props.squadOverride == null;
 
   return (
+    <>
+      {/* collapsed → header-only bar; sits behind the dock so it's revealed/covered cleanly */}
+      {showLauncher && (
+        <button onClick={props.onToggleOpen} style={launcher} title="Abrir análisis">
+          <span style={{ ...launcherDot, background: "var(--acc,#2f64e6)" }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+              <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+          <span style={{ fontWeight: 800, letterSpacing: "-.2px" }}>Análisis</span>
+          <span style={launcherMeta}>{props.pointCount} pts · {money(props.budget)}</span>
+          <span style={{ marginLeft: "auto", display: "flex" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M6 15l6-6 6 6" stroke="#8a94a3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+        </button>
+      )}
+
+      {showDock && (
     <div
+      ref={dockRef}
       style={{
         position: "absolute",
         left: 18,
@@ -55,15 +110,19 @@ export function AnalysisDock(props: Props) {
         bottom: 18,
         zIndex: 521,
         background: "rgba(255,255,255,.96)",
-        backdropFilter: "blur(16px)",
-        WebkitBackdropFilter: "blur(16px)",
+        // backdrop-filter is dropped mid-animation: re-blurring every frame is what made
+        // the open/close janky, and the bg is ~opaque so the difference is imperceptible.
+        backdropFilter: anim ? "none" : "blur(16px)",
+        WebkitBackdropFilter: anim ? "none" : "blur(16px)",
         border: "1px solid rgba(230,233,238,.95)",
         borderRadius: 16,
         boxShadow: "0 28px 70px -34px rgba(20,30,50,.55)",
         display: "flex",
         flexDirection: "column",
         overflow: "visible",
-        animation: "ppup .2s ease",
+        willChange: anim ? "transform, opacity" : undefined,
+        animation: anim === "out" ? "ppdown .2s ease forwards" : anim === "in" ? "ppup .2s ease" : undefined,
+        pointerEvents: anim === "out" ? "none" : "auto",
       }}
     >
       {/* header */}
@@ -100,7 +159,7 @@ export function AnalysisDock(props: Props) {
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: 13.5, fontWeight: 800, letterSpacing: "-.2px" }}>
-            Plan de acción
+            Análisis
           </div>
           <div
             style={{
@@ -135,6 +194,11 @@ export function AnalysisDock(props: Props) {
             </svg>
           </button>
         )}
+        <button onClick={props.onToggleOpen} title="Ocultar panel" style={iconBtn}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <path d="M6 9l6 6 6-6" stroke="#8a94a3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
       </div>
 
       {/* issue-type selector */}
@@ -143,55 +207,64 @@ export function AnalysisDock(props: Props) {
           padding: "9px 14px",
           display: "flex",
           alignItems: "center",
-          gap: 6,
-          flexWrap: "wrap",
+          gap: 9,
           borderBottom: "1px solid #f3f5f8",
         }}
       >
         <span style={miniLabel}>Tipo</span>
-        {props.types.map((t) => {
-          const active = ACTIVE_ISSUE_TYPES.has(t.slug);
-          const selected = props.issueType === t.slug;
-          return (
-            <button
-              key={t.slug}
-              disabled={!active}
-              onClick={() => active && props.onSetIssueType(t.slug)}
-              title={active ? undefined : "Próximamente"}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                border: `1px solid ${selected ? "var(--acc,#2f64e6)" : "#e6e9ee"}`,
-                background: selected ? "#eef3ff" : active ? "#fff" : "#f7f8fa",
-                color: selected ? "var(--acc,#2f64e6)" : active ? "#41506a" : "#b3bac5",
-                borderRadius: 18,
-                height: 28,
-                padding: "0 11px",
-                fontFamily: "Public Sans, sans-serif",
-                fontSize: 11.5,
-                fontWeight: 600,
-                cursor: active ? "pointer" : "not-allowed",
-              }}
-            >
-              <span
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: "50%",
-                  background: active ? typeColor(t.slug) : "#cdd4de",
-                  flex: "none",
-                }}
-              />
-              {props.typeLabels[t.slug] ?? t.label}
-              {!active && (
-                <span style={{ fontSize: 8.5, color: "#b3bac5", fontWeight: 500 }}>
-                  · próximamente
-                </span>
-              )}
-            </button>
-          );
-        })}
+        <div style={{ position: "relative", flex: "1 1 220px", maxWidth: 280 }}>
+          <span
+            style={{
+              position: "absolute",
+              left: 11,
+              top: "50%",
+              transform: "translateY(-50%)",
+              width: 9,
+              height: 9,
+              borderRadius: "50%",
+              background: typeColor(props.issueType),
+              pointerEvents: "none",
+            }}
+          />
+          <select
+            value={props.issueType}
+            onChange={(e) => props.onSetIssueType(e.target.value)}
+            style={{
+              width: "100%",
+              appearance: "none",
+              WebkitAppearance: "none",
+              border: "1px solid #e3e7ee",
+              background: "#fff",
+              borderRadius: 9,
+              height: 32,
+              padding: "0 30px 0 27px",
+              fontFamily: "Public Sans, sans-serif",
+              fontSize: 12.5,
+              fontWeight: 600,
+              color: "#1b2430",
+              cursor: "pointer",
+            }}
+          >
+            {props.types.map((t) => {
+              const active = ACTIVE_ISSUE_TYPES.has(t.slug);
+              const label = props.typeLabels[t.slug] ?? t.label;
+              return (
+                <option key={t.slug} value={t.slug} disabled={!active}>
+                  {active ? label : `${label} · próximamente`}
+                </option>
+              );
+            })}
+          </select>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            style={{ position: "absolute", right: 9, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}
+          >
+            <path d="M6 9l6 6 6-6" stroke="#8a94a3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
       </div>
 
       {/* controls */}
@@ -299,35 +372,66 @@ export function AnalysisDock(props: Props) {
         </button>
 
         {/* generate */}
-        <button
-          onClick={props.onGenerate}
-          disabled={props.pointCount === 0}
-          style={{
-            flex: "none",
-            display: "flex",
-            alignItems: "center",
-            gap: 7,
-            background: props.pointCount === 0 ? "#cdd4de" : "var(--acc,#2f64e6)",
-            color: "#fff",
-            border: "none",
-            borderRadius: 9,
-            height: 34,
-            padding: "0 16px",
-            fontFamily: "Public Sans, sans-serif",
-            fontSize: 12.5,
-            fontWeight: 700,
-            cursor: props.pointCount === 0 ? "not-allowed" : "pointer",
-            marginLeft: "auto",
-          }}
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M12 3l1.6 4.8L18 9.4l-4.4 1.6L12 16l-1.6-5L6 9.4l4.4-1.6L12 3z"
-              fill="#fff"
-            />
-          </svg>
-          {props.previewing ? "Actualizar plan" : "Generar plan"}
-        </button>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
+          {props.planError && (
+            <span
+              title={props.planError}
+              style={{
+                fontFamily: "IBM Plex Mono, monospace",
+                fontSize: 10.5,
+                color: "#c2333a",
+                maxWidth: 220,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              ⚠ {props.planError}
+            </span>
+          )}
+          <button
+            onClick={props.onGenerate}
+            disabled={props.pointCount === 0 || props.generating}
+            style={{
+              flex: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 7,
+              background: props.pointCount === 0 || props.generating ? "#cdd4de" : "var(--acc,#2f64e6)",
+              color: "#fff",
+              border: "none",
+              borderRadius: 9,
+              height: 34,
+              padding: "0 16px",
+              fontFamily: "Public Sans, sans-serif",
+              fontSize: 12.5,
+              fontWeight: 700,
+              cursor: props.pointCount === 0 || props.generating ? "not-allowed" : "pointer",
+            }}
+          >
+            {props.generating ? (
+              <span
+                style={{
+                  width: 14,
+                  height: 14,
+                  border: "2px solid rgba(255,255,255,.5)",
+                  borderTopColor: "#fff",
+                  borderRadius: "50%",
+                  display: "inline-block",
+                  animation: "ppspin .7s linear infinite",
+                }}
+              />
+            ) : (
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M12 3l1.6 4.8L18 9.4l-4.4 1.6L12 16l-1.6-5L6 9.4l4.4-1.6L12 3z"
+                  fill="#fff"
+                />
+              </svg>
+            )}
+            {props.generating ? "Generando…" : props.previewing ? "Actualizar plan" : "Generar plan"}
+          </button>
+        </div>
 
         {/* region popover */}
         {pop === "region" && (
@@ -456,6 +560,8 @@ export function AnalysisDock(props: Props) {
         )}
       </div>
     </div>
+      )}
+    </>
   );
 }
 
@@ -532,6 +638,46 @@ const popClear: React.CSSProperties = {
   fontSize: 11,
   fontWeight: 700,
   cursor: "pointer",
+};
+
+const launcher: React.CSSProperties = {
+  position: "absolute",
+  left: 18,
+  right: 404,
+  bottom: 18,
+  zIndex: 520,
+  display: "flex",
+  alignItems: "center",
+  gap: 11,
+  background: "rgba(255,255,255,.96)",
+  backdropFilter: "blur(16px)",
+  WebkitBackdropFilter: "blur(16px)",
+  border: "1px solid rgba(230,233,238,.95)",
+  borderRadius: 16,
+  boxShadow: "0 28px 70px -34px rgba(20,30,50,.55)",
+  height: 52,
+  padding: "0 14px 0 11px",
+  fontFamily: "Public Sans, sans-serif",
+  fontSize: 13.5,
+  fontWeight: 700,
+  color: "#1b2430",
+  cursor: "pointer",
+  textAlign: "left",
+};
+const launcherDot: React.CSSProperties = {
+  width: 30,
+  height: 30,
+  borderRadius: 9,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  flex: "none",
+};
+const launcherMeta: React.CSSProperties = {
+  fontFamily: "IBM Plex Mono, monospace",
+  fontSize: 10,
+  fontWeight: 500,
+  color: "#9aa3b1",
 };
 
 function pillBtn(active: boolean): React.CSSProperties {

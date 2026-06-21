@@ -57,11 +57,17 @@ export function runAnalysis(req: AnalysisRequest): PlanResult {
 
   // 4. Cluster the selected set into K squads (one squad per cluster).
   const groups = clusterIndices(selected, squadTarget);
+  const rawWeights = groups.map((idxs) => idxs.reduce((s, j) => s + selected[j].volume, 0));
+  const maxWeight = Math.max(1, ...rawWeights);
   const squads: Squad[] = groups.map((idxs, i) => {
     const members = idxs.map((j) => selected[j]);
     return {
       idx: i + 1,
       color: SQUAD_COLORS[i % SQUAD_COLORS.length],
+      // MOCK cluster priority — the optimization module supplies the real weight.
+      // Here we proxy it by the cluster's total volume (normalized 0..1) only so the
+      // region color ramp renders. NOT a model. The app never derives priority itself.
+      weight: rawWeights[i] / maxWeight,
       members: members.map((m) => m.id),
       polygon: convexHull(members),
       centroid: centroidOf(members),

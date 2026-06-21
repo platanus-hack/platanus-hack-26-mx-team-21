@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { PlanResult } from "../lib/types";
 import { typeUnit } from "../lib/types";
 import { money } from "../lib/money";
@@ -13,6 +14,10 @@ interface Props {
   plan: PlanResult | null;
   typeLabels: Record<string, string>;
   chips: Chip[];
+  // Parse a natural-language command into a draft and populate the dock. Resolves with
+  // optional parser notes (warnings/unresolved terms) or null when applied cleanly. This is
+  // the agent panel's OWN concern — independent of the dock's "Generar plan" button.
+  onSubmitPrompt?: (prompt: string) => Promise<string | null>;
   onClosePreview: () => void;
   onLocateObs: (id: string) => void;
   onLocateSquad: (lat: number, lng: number) => void;
@@ -52,7 +57,7 @@ export function AgentPanel(props: Props) {
   }
   return (
     <aside style={shell}>
-      <AgentDefault chips={props.chips} />
+      <AgentDefault chips={props.chips} onSubmitPrompt={props.onSubmitPrompt} />
     </aside>
   );
 }
@@ -202,7 +207,7 @@ function PlanPreview({
           {plan.topCritical.length === 0 && <Empty>Sin baches dentro del presupuesto.</Empty>}
         </div>
 
-        {/* squads */}
+        {/* crews (clusters) — categorical color per crew */}
         <SectionTitle title="Cuadrillas (clústeres)" hint="clic para ubicar" />
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {plan.squads.map((sq) => (
@@ -243,7 +248,33 @@ function Empty({ children }: { children: React.ReactNode }) {
 
 // ---- agent default ----------------------------------------------------------
 
-function AgentDefault({ chips }: { chips: Chip[] }) {
+function AgentDefault({
+  chips,
+  onSubmitPrompt,
+}: {
+  chips: Chip[];
+  onSubmitPrompt?: (prompt: string) => Promise<string | null>;
+}) {
+  const [prompt, setPrompt] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const submit = () => {
+    const text = prompt.trim();
+    if (!text || busy || !onSubmitPrompt) return;
+    setBusy(true);
+    setErr(null);
+    setNote(null);
+    onSubmitPrompt(text)
+      .then((n) => {
+        setNote(n ?? "Borrador aplicado al panel. Revisa y genera el plan.");
+        setPrompt("");
+      })
+      .catch((e) => setErr(e instanceof Error ? e.message : String(e)))
+      .finally(() => setBusy(false));
+  };
+
   return (
     <>
       <div
@@ -296,20 +327,37 @@ function AgentDefault({ chips }: { chips: Chip[] }) {
             Soy tu agente del mapa de prioridades. Elige un <strong>tipo de problema</strong>, fija
             el <strong>presupuesto</strong>, acota la <strong>región</strong> y genera un{" "}
             <strong>plan de acción</strong>: los baches más críticos dentro del presupuesto y las{" "}
-            <strong>cuadrillas</strong> por clúster. Cambia presupuesto, región o cuadrillas y el
-            plan se recalcula al instante.
+            <strong>cuadrillas</strong> por clúster. Ajusta presupuesto, región o cuadrillas y
+            vuelve a generar el plan.
           </div>
         </div>
-        <div style={{ display: "flex", gap: 9, marginBottom: 13, opacity: 0.85 }}>
+        <div style={{ display: "flex", gap: 9, marginBottom: 13, opacity: 0.95 }}>
           <div style={{ width: 22, height: 22, borderRadius: 7, background: "#e7eaf0", flex: "none", marginTop: 1 }} />
           <div style={{ flex: 1, fontSize: 12, lineHeight: 1.5, color: "#8a94a3" }}>
-            El comando en lenguaje natural llegará pronto. Por ahora, usa las acciones rápidas o el
-            panel de configuración.
+            O descríbelo en lenguaje natural abajo (p. ej. <em>"baches en Cuauhtémoc, 2 millones,
+            3 cuadrillas"</em>). Lo interpreto y relleno el panel para que lo revises antes de generar.
           </div>
         </div>
       </div>
 
       <div style={{ borderTop: "1px solid #eef0f4", padding: "10px 12px 12px", background: "rgba(255,255,255,.6)" }}>
+        {(note || err) && (
+          <div
+            style={{
+              fontSize: 10.5,
+              lineHeight: 1.4,
+              marginBottom: 9,
+              padding: "6px 9px",
+              borderRadius: 8,
+              fontFamily: "IBM Plex Mono, monospace",
+              background: err ? "#fdeceb" : "#eef4ff",
+              border: `1px solid ${err ? "#f6d4d2" : "#dbe6ff"}`,
+              color: err ? "#c2333a" : "#3a4655",
+            }}
+          >
+            {err ? `No pude interpretarlo: ${err}` : note}
+          </div>
+        )}
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 9 }}>
           {chips.map((c) => (
             <button
@@ -336,16 +384,23 @@ function AgentDefault({ chips }: { chips: Chip[] }) {
             display: "flex",
             alignItems: "center",
             gap: 8,
-            background: "#f4f6f9",
+            background: "#fff",
             border: "1px solid #e3e7ee",
             borderRadius: 12,
             padding: "5px 5px 5px 13px",
-            opacity: 0.7,
           }}
         >
           <input
-            disabled
-            placeholder="Describe un plan… (próximamente)"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                submit();
+              }
+            }}
+            disabled={busy || !onSubmitPrompt}
+            placeholder="Describe un plan en lenguaje natural…"
             style={{
               flex: 1,
               border: "none",
@@ -354,29 +409,44 @@ function AgentDefault({ chips }: { chips: Chip[] }) {
               fontSize: 13,
               background: "none",
               minWidth: 0,
-              color: "#9aa3b1",
-              cursor: "not-allowed",
+              color: "#1b2430",
             }}
           />
           <button
-            disabled
+            onClick={submit}
+            disabled={busy || !prompt.trim() || !onSubmitPrompt}
+            title="Interpretar"
             style={{
               flex: "none",
-              background: "#cdd4de",
+              background: busy || !prompt.trim() ? "#cdd4de" : "var(--acc,#2f64e6)",
               color: "#fff",
               border: "none",
               borderRadius: 9,
               width: 34,
               height: 34,
-              cursor: "not-allowed",
+              cursor: busy || !prompt.trim() ? "not-allowed" : "pointer",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
             }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <path d="M5 12h13M13 6l6 6-6 6" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            {busy ? (
+              <span
+                style={{
+                  width: 15,
+                  height: 15,
+                  border: "2px solid rgba(255,255,255,.5)",
+                  borderTopColor: "#fff",
+                  borderRadius: "50%",
+                  display: "inline-block",
+                  animation: "ppspin .7s linear infinite",
+                }}
+              />
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M5 12h13M13 6l6 6-6 6" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
           </button>
         </div>
       </div>

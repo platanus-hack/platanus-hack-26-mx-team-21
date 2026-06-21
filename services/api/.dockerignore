@@ -1,0 +1,11 @@
+.venv/
+**/__pycache__/
+**/*.pyc
+*.egg-info/
+.pytest_cache/
+tests/
+.data/
+.env
+.env.*
+!.env.example
+README.md
