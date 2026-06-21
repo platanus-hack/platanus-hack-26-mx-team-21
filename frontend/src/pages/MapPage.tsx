@@ -25,6 +25,7 @@ import type {
   AnalysisPoint,
   AnalysisRequest,
   ChatMessage,
+  DimensionCount,
   DraftChatResponse,
   Observation,
   ObservationDetail,
@@ -106,13 +107,17 @@ export function MapPage() {
   // blob: URLs for citizen-report thumbnails (WhatsApp photos), keyed by observation id.
   // Streamed from the R2 broker once observations load; revoked on unmount.
   const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({});
-  const [rois, setRois] = useState<Roi[]>([]);
+  const [dimensionCounts, setDimensionCounts] = useState<DimensionCount[]>([]);
+  const roiCache = useRef<Map<string, Roi[]>>(new Map());
+  const [roiVersion, setRoiVersion] = useState(0); // bump after a lazy ROI fetch resolves
   const [boundary, setBoundary] = useState<unknown | null>(null);
   const [liveRuns, setLiveRuns] = useState<RunSummary[]>([]);
 
   // ---- layer toggles ------------------------------------------------------
   const [showPins, setShowPins] = useState(true);
-  const [showRois, setShowRois] = useState(true);
+  const [riskMaster, setRiskMaster] = useState(true);
+  const [riskExpanded, setRiskExpanded] = useState(true);
+  const [activeDimensions, setActiveDimensions] = useState<Record<string, boolean>>({});
   const [activeTypes, setActiveTypes] = useState<Record<string, boolean>>({});
 
   // ---- config (the dock) --------------------------------------------------
@@ -175,11 +180,11 @@ export function MapPage() {
     let alive = true;
     (async () => {
       try {
-        const [tenant, tc, obs, ro, bnd, live] = await Promise.all([
+        const [tenant, tc, obs, dc, bnd, live] = await Promise.all([
           api.getActiveTenant(),
           api.getTypeCounts(),
           api.getObservations(),
-          api.getRois(),
+          api.getRoiDimensionCounts(),
           api.getBoundary(),
           api.listRuns(),
         ]);
@@ -192,7 +197,16 @@ export function MapPage() {
         setTypes(tc);
         setActiveTypes(Object.fromEntries(tc.map((t) => [t.slug, true])));
         setObservations(obs);
-        setRois(ro);
+        setDimensionCounts(dc);
+        // Enable every dimension that has data; pre-fetch their ROIs so the layer
+        // paints on first load (later toggles fetch lazily — see ensureDimLoaded).
+        const enabled = Object.fromEntries(dc.filter((d) => d.count > 0).map((d) => [d.dimension, true]));
+        setActiveDimensions(enabled);
+        const dims = Object.keys(enabled);
+        const fetched = await Promise.all(dims.map((d) => api.getRois([d])));
+        if (!alive) return;
+        dims.forEach((d, i) => roiCache.current.set(d, fetched[i]));
+        setRoiVersion((v) => v + 1);
         setBoundary(bnd);
         setLiveRuns(live);
         setLoaded(true);
@@ -270,6 +284,25 @@ export function MapPage() {
   );
 
   const pointCount = request.points.length;
+
+  // Risk zones to draw: union of the toggled-on dimensions' cached ROIs (empty when
+  // the master is off). roiVersion forces recompute after a lazy fetch fills the cache.
+  const roisToRender = useMemo<Roi[]>(() => {
+    if (!riskMaster) return [];
+    const out: Roi[] = [];
+    for (const [dim, on] of Object.entries(activeDimensions)) {
+      if (!on) continue;
+      const cached = roiCache.current.get(dim);
+      if (cached) out.push(...cached);
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [riskMaster, activeDimensions, roiVersion]);
+
+  const totalRoiCount = useMemo(
+    () => dimensionCounts.reduce((s, d) => s + d.count, 0),
+    [dimensionCounts],
+  );
 
   const historyItems = useMemo<PlanHistoryItem[]>(() => {
     const local: PlanHistoryItem[] = history.map((h) => ({
@@ -419,6 +452,31 @@ export function MapPage() {
       .finally(() => setSweepLoading(false));
   }, []);
 
+  // Lazy per-dimension ROI fetch: a dimension's polygons load the first time it is
+  // switched on, then stay cached. Never ships every dimension's geometry up front.
+  const ensureDimLoaded = useCallback(async (dim: string) => {
+    if (roiCache.current.has(dim)) return;
+    const r = await api.getRois([dim]);
+    roiCache.current.set(dim, r);
+    setRoiVersion((v) => v + 1);
+  }, []);
+
+  const onToggleDimension = (dim: string) => {
+    const turningOn = !activeDimensions[dim];
+    setActiveDimensions((ad) => ({ ...ad, [dim]: !ad[dim] }));
+    if (turningOn) void ensureDimLoaded(dim);
+  };
+
+  const onToggleRiskMaster = () => {
+    const turningOn = !riskMaster;
+    setRiskMaster(turningOn);
+    if (turningOn) {
+      for (const d of Object.keys(activeDimensions)) {
+        if (activeDimensions[d]) void ensureDimLoaded(d);
+      }
+    }
+  };
+
   const onToggleType = (slug: string) =>
     setActiveTypes((at) => ({ ...at, [slug]: !at[slug] }));
 
@@ -507,11 +565,11 @@ export function MapPage() {
         thumbUrls={thumbUrls}
         boundary={boundary}
         showPins={showPins}
-        showRois={showRois}
+        showRois={riskMaster}
         activeTypes={activeTypes}
         regionFilter={regionFilter}
         plan={activePlan}
-        rois={rois}
+        rois={roisToRender}
         highlightSweep={sweepRoute?.sweep ?? null}
         selectedId={selectedId}
         accent={accent}
@@ -536,14 +594,19 @@ export function MapPage() {
       <LayersPanel
         types={types}
         totalObs={observations.length}
-        roiCount={rois.length}
         showPins={showPins}
-        showRois={showRois}
+        riskMaster={riskMaster}
+        riskExpanded={riskExpanded}
+        dimensionCounts={dimensionCounts}
+        activeDimensions={activeDimensions}
+        totalRoiCount={totalRoiCount}
         activeTypes={activeTypes}
         lastSweepLabel={`${observations.length} obs · en vivo`}
         bottom={layersBottom}
         onTogglePins={() => setShowPins((v) => !v)}
-        onToggleRois={() => setShowRois((v) => !v)}
+        onToggleRiskMaster={onToggleRiskMaster}
+        onToggleRiskExpanded={() => setRiskExpanded((v) => !v)}
+        onToggleDimension={onToggleDimension}
         onToggleType={onToggleType}
         onSignOut={signOut}
       />

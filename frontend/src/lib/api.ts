@@ -2,6 +2,7 @@
 // these; it has no direct access to the custom schemas.
 import { supabase } from "./supabase";
 import type {
+  DimensionCount,
   Observation,
   ObservationDetail,
   Roi,
@@ -99,8 +100,11 @@ export async function getSweepRoute(id: string): Promise<SweepRoute | null> {
   };
 }
 
-export async function getRois(): Promise<Roi[]> {
-  const { data, error } = await supabase.rpc("app_current_rois");
+export async function getRois(dimensions?: string[], limit?: number): Promise<Roi[]> {
+  const { data, error } = await supabase.rpc("app_current_rois", {
+    p_dimensions: dimensions && dimensions.length ? dimensions : undefined,
+    p_limit: limit ?? undefined,
+  });
   if (error) throw error;
   return (data ?? []).map((r) => ({
     id: r.id,
@@ -110,7 +114,18 @@ export async function getRois(): Promise<Roi[]> {
     riskScore: r.risk_score,
     dominantType: r.dominant_type,
     description: r.description,
+    signalCount: r.signal_count,
     geojson: r.geom_geojson,
+  }));
+}
+
+export async function getRoiDimensionCounts(): Promise<DimensionCount[]> {
+  const { data, error } = await supabase.rpc("app_roi_dimension_counts");
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    dimension: r.risk_dimension,
+    count: r.roi_count,
+    maxRisk: r.max_risk,
   }));
 }
 

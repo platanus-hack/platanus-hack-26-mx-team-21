@@ -117,7 +117,14 @@ export interface Roi {
   riskScore: number;
   dominantType: string;
   description: string;
+  signalCount: number | null;
   geojson: unknown;
+}
+
+export interface DimensionCount {
+  dimension: string;
+  count: number;
+  maxRisk: number | null;
 }
 
 export interface RunSummary {

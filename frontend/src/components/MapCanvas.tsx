@@ -2,6 +2,33 @@ import { memo, useEffect, useRef } from "react";
 import L from "leaflet";
 import type { Observation, PlanResult, Roi } from "../lib/types";
 import { volumeColor } from "../lib/geo";
+import { dimensionColor, dimensionLabel } from "../lib/dimensions";
+
+function escapeHtml(s: string): string {
+  return s.replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string,
+  );
+}
+
+// Popup shown when a risk zone is clicked: dimension, risk score, dominant type,
+// signal count, and the generated inspection brief — the payoff of the real data.
+function roiPopupHtml(roi: Roi): string {
+  const color = dimensionColor(roi.riskDimension);
+  const sc = roi.signalCount != null ? ` · ${roi.signalCount} señales` : "";
+  const score = typeof roi.riskScore === "number" ? roi.riskScore.toFixed(1) : roi.riskScore;
+  return `
+    <div style="font-family:Public Sans,sans-serif;max-width:240px;">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+        <span style="width:9px;height:9px;border-radius:50%;background:${color};display:inline-block;"></span>
+        <strong style="font-size:12px;color:#1b2430;">${dimensionLabel(roi.riskDimension)}</strong>
+      </div>
+      <div style="font-family:IBM Plex Mono,monospace;font-size:10px;color:#7a8493;margin-bottom:5px;">
+        riesgo ${score} · ${escapeHtml(roi.dominantType ?? "")}${sc}
+      </div>
+      <div style="font-size:11px;line-height:1.4;color:#3a4250;">${escapeHtml(roi.description ?? "")}</div>
+    </div>`;
+}
 
 interface Props {
   observations: Observation[];
@@ -90,27 +117,37 @@ export const MapCanvas = memo(function MapCanvas(props: Props) {
     }
   }, [props.boundary]);
 
-  // ---- risk-ROIs (external dataset) — toggleable standalone layer ----------
-  // Just the dashed red polygons; no labels.
+  // ---- risk-ROIs (external dataset) — per-dimension toggleable layer --------
+  // Dashed polygons colored by risk dimension; fill scaled by risk_score within the
+  // dimension; click opens the inspection-brief popup. Kept label-free (no clutter).
   useEffect(() => {
     const g = groups.current.rois;
     if (!g) return;
     g.clearLayers();
     if (!props.showRois) return;
+    const maxByDim: Record<string, number> = {};
     for (const roi of props.rois) {
+      maxByDim[roi.riskDimension] = Math.max(maxByDim[roi.riskDimension] ?? 0, roi.riskScore ?? 0);
+    }
+    for (const roi of props.rois) {
+      const color = dimensionColor(roi.riskDimension);
+      const share = Math.max(0, Math.min(1, (roi.riskScore ?? 0) / (maxByDim[roi.riskDimension] || 1)));
+      const fillOpacity = 0.08 + share * 0.24; // 0.08–0.32 within the dimension
       try {
         L.geoJSON({ type: "Feature", geometry: roi.geojson, properties: {} } as never, {
-          interactive: false,
+          interactive: true,
           style: {
-            color: "#e5484d",
+            color,
             weight: 1.6,
-            opacity: 0.7,
+            opacity: 0.75,
             dashArray: "5 4",
             fill: true,
-            fillColor: "#e5484d",
-            fillOpacity: 0.06,
+            fillColor: color,
+            fillOpacity,
           },
-        }).addTo(g);
+        })
+          .bindPopup(roiPopupHtml(roi), { maxWidth: 260 })
+          .addTo(g);
       } catch {
         /* ignore */
       }

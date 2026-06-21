@@ -43,7 +43,7 @@ export type Database = {
         Returns: boolean
       }
       app_current_rois: {
-        Args: never
+        Args: { p_dimensions?: string[]; p_limit?: number }
         Returns: {
           centroid_lat: number
           centroid_lng: number
@@ -53,6 +53,15 @@ export type Database = {
           id: string
           risk_dimension: string
           risk_score: number
+          signal_count: number
+        }[]
+      }
+      app_roi_dimension_counts: {
+        Args: never
+        Returns: {
+          max_risk: number
+          risk_dimension: string
+          roi_count: number
         }[]
       }
       app_get_run: { Args: { p_id: string }; Returns: Json }
