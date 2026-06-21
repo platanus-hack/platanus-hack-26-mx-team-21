@@ -1,0 +1,35 @@
+# Fly config for the Kapso WhatsApp controller.
+#
+# Always-on (min 1 machine, no auto-stop): inbound webhooks must be answered instantly and
+# conversation sessions/dedupe live in-memory, so the machine must not stop between the
+# photo and the location messages.
+#
+# Non-secret config is here; secrets go through `fly secrets set` (see README "Deploy"):
+#   KAPSO_API_KEY, KAPSO_PHONE_NUMBER_ID, WRITE_API_TOKEN (= the API's OPERATOR_API_KEY),
+#   and optionally KAPSO_WEBHOOK_SECRET.
+
+app = "citycrawl-whatsapp"
+primary_region = "dfw"
+
+[build]
+
+[env]
+  PORT = "8080"
+  KAPSO_BASE_URL = "https://api.kapso.ai/meta/whatsapp"
+  WRITE_API_MODE = "http"
+  WRITE_API_BASE_URL = "https://citycrawl-api.fly.dev"
+  DEFAULT_OBSERVATION_TYPE = "pothole"
+  KAPSO_SIGNATURE_HEADER = "x-webhook-signature"
+  KAPSO_SIGNATURE_REQUIRED = "false"
+  SESSION_TTL_MINUTES = "15"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

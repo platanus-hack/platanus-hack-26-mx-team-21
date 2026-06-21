@@ -14,7 +14,7 @@ from citycrawl_api import __version__
 from citycrawl_api.config import get_settings
 from citycrawl_api.errors import ApiError
 from citycrawl_api.logging import configure_logging, get_logger, log_event, set_request_id
-from citycrawl_api.routers import datasets, health, llm, planning, video
+from citycrawl_api.routers import datasets, health, llm, observations, planning, video
 
 logger = get_logger()
 
@@ -103,6 +103,7 @@ def create_app() -> FastAPI:
     app.include_router(llm.router)
     app.include_router(datasets.router)
     app.include_router(video.router)
+    app.include_router(observations.router)
     return app
 
 
