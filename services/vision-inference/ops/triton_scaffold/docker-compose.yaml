@@ -1,0 +1,45 @@
+# Three services on the private GPU server: Triton detector + vLLM Qwen + orchestrator.
+# All share the GPU (128GB unified). Adjust gpu-memory-utilization so they coexist.
+services:
+
+  triton:
+    image: nvcr.io/nvidia/tritonserver:26.05-py3   # match your NGC release / arm64
+    gpus: all
+    ipc: host
+    shm_size: 8gb
+    command: >
+      tritonserver --model-repository=/models_repo
+                   --grpc-port=8001 --http-port=8000 --metrics-port=8002
+    environment:
+      ANOMALY_MODELS_DIR: /models
+    volumes:
+      - ./triton/model_repository:/models_repo
+      - ../models:/models:ro          # pablo_v1 + segformer-cityscapes
+    ports: ["8001:8001", "8002:8002"]
+    # NOTE: the python backend needs ultralytics+transformers in Triton's python env.
+    # Either bake a custom Triton image or use a python-backend execution-env (conda-pack).
+
+  vllm:
+    image: vllm/vllm-openai:latest     # use a vLLM build matching the server arch (e.g. arm64)
+    gpus: all
+    ipc: host
+    shm_size: 16gb
+    command: >
+      --model Qwen/Qwen2.5-VL-7B-Instruct
+      --port 8000 --dtype bfloat16 --gpu-memory-utilization 0.55
+      --limit-mm-per-prompt image=1
+    volumes:
+      - ${HOME}/.cache/huggingface:/root/.cache/huggingface
+      - ../models:/models:ro
+    ports: ["8000:8000"]
+
+  orchestrator:
+    build: ./orchestrator
+    depends_on: [triton, vllm]
+    environment:
+      TRITON_URL: triton:8001
+      VLM_URL: http://vllm:8000/v1
+      VLM_MODEL: Qwen/Qwen2.5-VL-7B-Instruct
+      VLM_WORKERS: "2"
+      PORT: "50051"
+    ports: ["50051:50051"]

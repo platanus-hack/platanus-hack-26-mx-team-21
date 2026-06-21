@@ -1,0 +1,32 @@
+# Triton config for the every-frame detector (YOLO-seg + Segformer floor gate).
+# Python backend = simplest correct path; swap to a TensorRT ensemble for max speed
+# (see export/export_yolo_trt.py and ARCHITECTURE.md "Going faster").
+name: "anomaly_detector"
+backend: "python"
+max_batch_size: 0        # we handle one image (variable HxW) per request
+
+input [
+  {
+    name: "IMAGE_JPEG"
+    data_type: TYPE_UINT8
+    dims: [ -1 ]         # raw JPEG bytes
+  }
+]
+
+# Flattened, variable-length detections. N = number of on-floor pothole boxes.
+output [
+  { name: "BOXES",        data_type: TYPE_FP32,  dims: [ -1, 4 ] },   # x1,y1,x2,y2
+  { name: "SCORES",       data_type: TYPE_FP32,  dims: [ -1 ] },
+  { name: "ON_FLOOR",     data_type: TYPE_BOOL,  dims: [ -1 ] },
+  { name: "ROAD_OVERLAP", data_type: TYPE_FP32,  dims: [ -1 ] }
+]
+
+instance_group [ { count: 1, kind: KIND_GPU } ]
+
+# Keep the model warm; Triton loads it once and serves over HTTP/gRPC.
+parameters: {
+  key: "conf"          value: { string_value: "0.40" }
+}
+parameters: {
+  key: "road_frac"     value: { string_value: "0.5" }
+}

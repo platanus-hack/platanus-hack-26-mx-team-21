@@ -1,0 +1,18 @@
+.env
+.env.*
+!.env.example
+*.db
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+.pytest_cache/
+# never commit model weights / media / outputs (live outside the repo)
+*.pt
+*.safetensors
+*.mp4
+models/
+outputs/
+data/
