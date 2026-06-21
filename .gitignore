@@ -226,3 +226,8 @@ __marimo__/
 .dev.vars
 .wrangler/
 .superpowers/
+
+# Claude Code local state & worktrees
+.claude/
+.claire/
+frontend/verify_tmp.cjs
