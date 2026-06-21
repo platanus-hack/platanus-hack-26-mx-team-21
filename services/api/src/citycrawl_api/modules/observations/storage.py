@@ -37,3 +37,10 @@ def make_thumbnail_store(settings: Settings) -> tuple[ObjectStore, str]:
         return ObjectStore(fs, THUMBNAIL_BUCKET), THUMBNAIL_BUCKET
     fs = fsspec.filesystem("file")
     return ObjectStore(fs, f"{settings.local_root}/{THUMBNAIL_BUCKET}"), THUMBNAIL_BUCKET
+
+
+def object_locator(bucket: str, path: str) -> str:
+    """Backend-agnostic locator handed to the inference server (which holds R2 creds).
+    The logical bucket name is what the DB records, so 's3://{bucket}/{path}' resolves the
+    same object the broker serves."""
+    return f"s3://{bucket}/{path}"
