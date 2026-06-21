@@ -84,7 +84,13 @@ export function AnalysisDock(props: Props) {
     <>
       {/* collapsed → header-only bar; sits behind the dock so it's revealed/covered cleanly */}
       {showLauncher && (
-        <button onClick={props.onToggleOpen} style={launcher} title="Abrir análisis">
+        <button
+          onClick={props.onToggleOpen}
+          title="Abrir análisis"
+          // drop the blur while the dock animates over it — re-blurring the revealed
+          // strip every frame is pure cost; the frosted look returns once at rest.
+          style={anim ? { ...launcher, backdropFilter: "none", WebkitBackdropFilter: "none" } : launcher}
+        >
           <span style={{ ...launcherDot, background: "var(--acc,#2f64e6)" }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
               <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
