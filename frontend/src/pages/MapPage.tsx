@@ -5,13 +5,15 @@ import { AgentPanel } from "../components/AgentPanel";
 import { AnalysisDock } from "../components/AnalysisDock";
 import { HistoryPopover, type PlanHistoryItem } from "../components/HistoryPopover";
 import { ObservationCard } from "../components/ObservationCard";
+import { ToastStack } from "../components/ToastStack";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "../lib/auth";
 import * as api from "../lib/api";
+import { useObservationStream, type Toast } from "../lib/observationStream";
 import { fetchObjectUrl, THUMBNAIL_BUCKET } from "../lib/objects";
-import { optimizePlan, parseDraft } from "../lib/citycrawlApi";
+import { optimizePlan, chatDraft } from "../lib/citycrawlApi";
 import {
   ACTIVE_ISSUE_TYPES,
   DEFAULT_BUDGET,
@@ -22,6 +24,8 @@ import {
 import type {
   AnalysisPoint,
   AnalysisRequest,
+  ChatMessage,
+  DraftChatResponse,
   Observation,
   ObservationDetail,
   PlanDraft,
@@ -90,12 +94,13 @@ function buildRequest(
 }
 
 export function MapPage() {
-  const { signOut } = useAuth();
+  const { session, signOut } = useAuth();
 
   // ---- live data ----------------------------------------------------------
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [accent, setAccent] = useState("#2f64e6");
+  const [tenantId, setTenantId] = useState<string | null>(null);
   const [types, setTypes] = useState<TypeCount[]>([]);
   const [observations, setObservations] = useState<Observation[]>([]);
   // blob: URLs for citizen-report thumbnails (WhatsApp photos), keyed by observation id.
@@ -145,6 +150,13 @@ export function MapPage() {
   const [sweepRoute, setSweepRoute] = useState<SweepRoute | null>(null);
   const [sweepLoading, setSweepLoading] = useState(false);
 
+  // ---- live observation stream -------------------------------------------
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [pulseIds, setPulseIds] = useState<Set<string>>(() => new Set());
+  const [fitTarget, setFitTarget] = useState<{ points: { lat: number; lng: number }[]; n: number } | null>(null);
+  const fitSeq = useRef(0);
+  const panSeq = useRef(0); // bumps panTarget.n so the fly-to re-triggers per "Ver"
+
   // The layers panel must clear whatever sits bottom-left: the dock/launcher
   // (always) and the observation card (only while one is open). Both are
   // anchored at bottom:18, so the taller wins.
@@ -176,6 +188,7 @@ export function MapPage() {
           setAccent(tenant.accent);
           document.documentElement.style.setProperty("--acc", tenant.accent);
         }
+        if (tenant?.id) setTenantId(tenant.id);
         setTypes(tc);
         setActiveTypes(Object.fromEntries(tc.map((t) => [t.slug, true])));
         setObservations(obs);
@@ -343,6 +356,58 @@ export function MapPage() {
       .finally(() => setDetailLoading(false));
   }, []);
 
+  // ---- live observation stream wiring ------------------------------------
+  // Authoritative refetch folded into the map state; debounced upstream by the hook.
+  const refetchObservations = useCallback(() => {
+    api.getObservations().then(setObservations).catch(() => {});
+  }, []);
+
+  const pushToast = useCallback((t: Toast) => {
+    setToasts((cur) => [t, ...cur].slice(0, 4)); // cap the stack
+    // Pulse the new pin(s) for ~3s.
+    const ids =
+      t.target.type === "point"
+        ? [t.target.observationId]
+        : []; // batch ids aren't in the lean payload target; pulse resolves on refetch below
+    if (ids.length) {
+      setPulseIds((cur) => new Set([...cur, ...ids]));
+      setTimeout(() => {
+        setPulseIds((cur) => {
+          const next = new Set(cur);
+          for (const id of ids) next.delete(id);
+          return next;
+        });
+      }, 3000);
+    }
+  }, []);
+
+  useObservationStream({
+    tenantId,
+    accessToken: session?.access_token ?? null,
+    labelFor: (slug) => typeLabels[slug] ?? slug,
+    onRefetch: refetchObservations,
+    onToast: pushToast,
+  });
+
+  const onToastAction = useCallback(
+    (t: Toast) => {
+      setToasts((cur) => cur.filter((x) => x.id !== t.id));
+      if (t.target.type === "point") {
+        onSelect(t.target.observationId);
+        panSeq.current += 1;
+        setPanTarget({ lat: t.target.lat, lng: t.target.lng, n: panSeq.current });
+      } else {
+        fitSeq.current += 1;
+        setFitTarget({ points: t.target.points, n: fitSeq.current });
+      }
+    },
+    [onSelect],
+  );
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts((cur) => cur.filter((x) => x.id !== id));
+  }, []);
+
   // Resolve and show the inspection sweep behind an observation; fetch is fire-and-
   // forget with a loading flag so the banner can render immediately.
   const onViewSweep = useCallback((obsId: string) => {
@@ -366,12 +431,18 @@ export function MapPage() {
   const locateSquad = (lat: number, lng: number) =>
     setPanTarget({ lat, lng, n: (panTarget?.n ?? 0) + 1 });
 
-  // Natural-language command — parse via the Fly LLM endpoint and POPULATE the dock for the
-  // user to review. It never starts optimization. Returns parser notes (warnings/unresolved
-  // terms) for the panel to surface, or null when the draft was applied cleanly.
-  const onSubmitPrompt = useCallback(
-    async (prompt: string): Promise<string | null> => {
-      const draft: PlanDraft = await parseDraft(prompt, types, regions);
+  // The draft accumulated across the agent conversation — sent back each turn as context so
+  // the model only changes what the user asks for.
+  const draftRef = useRef<PlanDraft | null>(null);
+
+  // Conversational agent turn — sends the full message history plus the draft so far, applies
+  // the merged draft to the dock for review, and returns the assistant's Spanish reply. It
+  // never starts optimization.
+  const onChat = useCallback(
+    async (messages: ChatMessage[]): Promise<string> => {
+      const res: DraftChatResponse = await chatDraft(messages, draftRef.current, types, regions);
+      const draft = res.draft;
+      draftRef.current = draft;
       if (draft.issueType && ACTIVE_ISSUE_TYPES.has(draft.issueType)) setIssueType(draft.issueType);
       if (typeof draft.budget === "number" && draft.budget > 0)
         setBudget(Math.min(BUDGET_MAX, Math.max(BUDGET_MIN, draft.budget)));
@@ -381,8 +452,7 @@ export function MapPage() {
       }
       if (typeof draft.squadCount === "number") setSquadOverride(draft.squadCount);
       setDockOpen(true);
-      const notes = [...draft.unresolvedTerms, ...draft.warnings];
-      return notes.length ? notes.join(" · ") : null;
+      return res.reply;
     },
     [types, regions],
   );
@@ -446,6 +516,8 @@ export function MapPage() {
         selectedId={selectedId}
         accent={accent}
         panTarget={panTarget}
+        pulseIds={pulseIds}
+        fitTarget={fitTarget}
         onSelect={onSelect}
       />
 
@@ -481,7 +553,7 @@ export function MapPage() {
         plan={activePlan}
         typeLabels={typeLabels}
         chips={chips}
-        onSubmitPrompt={onSubmitPrompt}
+        onChat={onChat}
         onClosePreview={closePreview}
         onLocateObs={onSelect}
         onLocateSquad={locateSquad}
@@ -535,6 +607,8 @@ export function MapPage() {
           }}
         />
       )}
+
+      <ToastStack toasts={toasts} onAction={onToastAction} onDismiss={dismissToast} />
     </div>
   );
 }
