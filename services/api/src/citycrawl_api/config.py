@@ -46,6 +46,12 @@ class Settings(BaseSettings):
     supabase_timeout_s: float = 10.0
     anthropic_timeout_s: float = 30.0
 
+    # --- Planning engine ------------------------------------------------------
+    planning_engine: str = "optimization"     # "optimization" | "mock"
+    tomtom_api_key: str | None = None
+    traffic_cache_path: str = ".data/traffic_cache.json"
+    traffic_grid_decimals: int = 3
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]

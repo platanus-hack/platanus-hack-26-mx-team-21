@@ -5,6 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Response
 
 from citycrawl_api.auth import User, require_user
+from citycrawl_api.config import get_settings
+from citycrawl_api.modules.planning.engine import OptimizationPlanningEngine
 from citycrawl_api.modules.planning.mock import MockPlanningEngine
 from citycrawl_api.modules.planning.models import (
     AnalysisRequest,
@@ -12,11 +14,25 @@ from citycrawl_api.modules.planning.models import (
     ClusteredPriority,
     PlanResult,
 )
+from citycrawl_api.modules.planning.protocol import PlanningEngine
+from citycrawl_api.modules.planning.traffic import TrafficProvider
 
 router = APIRouter(prefix="/v1/planning", tags=["planning"])
 
-# Single bound engine. Swap this line when a real optimizer exists; routes are unchanged.
-_engine = MockPlanningEngine()
+
+def _build_engine() -> PlanningEngine:
+    settings = get_settings()
+    if settings.planning_engine == "mock":
+        return MockPlanningEngine()
+    traffic = TrafficProvider(
+        cache_path=settings.traffic_cache_path,
+        grid_decimals=settings.traffic_grid_decimals,
+    )
+    return OptimizationPlanningEngine(traffic)
+
+
+# Single bound engine, selected by PLANNING_ENGINE. Routes depend only on the protocol.
+_engine: PlanningEngine = _build_engine()
 
 
 @router.post("/optimize", response_model=PlanResult, response_model_by_alias=True)
