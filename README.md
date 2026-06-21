@@ -48,7 +48,16 @@ Flow API**, y hace selección **greedy** de superclusters por peso descendente
 hasta agotar el presupuesto.
 
 - **Peso (descontento)** = `velocidad × flujo vehicular semanal × volumen`
-- **Costo** por supercluster = `2000 + 8000 × volumen total`
+- **Costo** por supercluster = `costo por viaje + costo por m3 de pavimentacion × volumen total`
+
+<img src="./super-clusters.jpeg" alt="Super Clusters" width="400" />
+
+**Superclusters:** clusters de baches cercanos (agrupados por calle) que se fusionan
+de forma greedy por centroide más cercano hasta un tope de puntos, formando un frente
+de trabajo contiguo.
+**Técnica optimizada:** en vez de bachear hoyos sueltos, se repavimenta el segmento
+completo en una sola salida — amortizando el costo fijo por viaje y maximizando el
+descontento aliviado por peso invertido.
 
 ## Operación en lenguaje natural (Track ☎️ Legacy)
 
