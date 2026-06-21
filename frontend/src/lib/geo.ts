@@ -11,39 +11,34 @@ export function haversine(la1: number, lo1: number, la2: number, lo2: number): n
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-// Legacy per-observation priority color (null weight = pending/neutral). Kept for the
-// observation card + anywhere the legacy weight is still surfaced; NO longer the pin driver.
-export function weightColor(w: number | null): string {
-  if (w == null) return "#9aa3b1";
-  if (w >= 70) return "#e5484d";
-  if (w >= 40) return "#f5a623";
-  return "#30a46c";
-}
-
-// ---- Volume ramp (§4.1) -----------------------------------------------------
-// Pin decoration by volume relative to the in-view max. 3-stop green→amber→red.
-const VOL_STOPS: [number, number, number][] = [
+// ---- Green→amber→red ramp ---------------------------------------------------
+// Shared 3-stop ramp. `volumeColor` colors a pin by its volume metadata relative
+// to the in-view max (§4.1). `priorityColor` colors a cluster region by the model-
+// provided weight (0..1) — the app never derives this, it only paints it.
+const RAMP_STOPS: [number, number, number][] = [
   [48, 164, 108],
   [245, 166, 35],
   [229, 72, 77],
 ];
 
-export function volumeColor(v: number, max: number): string {
-  const t = max > 0 ? Math.min(0.999, Math.max(0, v / max)) : 0;
-  const x = t * (VOL_STOPS.length - 1);
+function rampColor(t: number): string {
+  const x = Math.min(0.999, Math.max(0, t)) * (RAMP_STOPS.length - 1);
   const i = Math.floor(x);
   const f = x - i;
-  const a = VOL_STOPS[i];
-  const b = VOL_STOPS[i + 1] || a;
+  const a = RAMP_STOPS[i];
+  const b = RAMP_STOPS[i + 1] || a;
   return `rgb(${Math.round(a[0] + (b[0] - a[0]) * f)},${Math.round(
     a[1] + (b[1] - a[1]) * f,
   )},${Math.round(a[2] + (b[2] - a[2]) * f)})`;
 }
 
-// Radius scales with sqrt(volume) so circle *area* tracks volume.
-export function volumeRadius(v: number, max: number): number {
-  const t = max > 0 ? Math.min(1, Math.sqrt(Math.max(0, v) / max)) : 0;
-  return 4 + t * 7; // 4..11 px
+export function volumeColor(v: number, max: number): string {
+  return rampColor(max > 0 ? v / max : 0);
+}
+
+// Cluster-region color from the model's normalized weight (0..1). Higher = hotter.
+export function priorityColor(weight: number): string {
+  return rampColor(weight);
 }
 
 // ---- Clustering + hulls (§2.3.4, §4.2) --------------------------------------
@@ -62,6 +57,18 @@ export function centroidOf(pts: LatLng[]): LatLng {
     lng += p.lng;
   }
   return { lat: lat / pts.length, lng: lng / pts.length };
+}
+
+// Bounded radius (meters) for drawing a cluster as a soft region. Uses the 75th-
+// percentile member→centroid distance so a couple of far-flung members don't blow
+// the blob up, then clamps to a sane on-map range. Keeps regions clean, never slivers.
+export function clusterRadiusMeters(members: LatLng[], centroid: LatLng): number {
+  if (members.length < 2) return 380;
+  const ds = members
+    .map((m) => haversine(m.lat, m.lng, centroid.lat, centroid.lng))
+    .sort((a, b) => a - b);
+  const p75 = ds[Math.min(ds.length - 1, Math.floor(ds.length * 0.75))];
+  return Math.max(360, Math.min(2200, p75 * 1.25));
 }
 
 // Deterministic k-means-style clustering on lat/lng. Returns, for each non-empty

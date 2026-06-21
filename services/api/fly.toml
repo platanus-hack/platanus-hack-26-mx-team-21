@@ -1,0 +1,31 @@
+# Fly.io config for the citycrawl modular API. One shared-cpu-1x Machine, 1 GB RAM, one
+# Uvicorn worker. dfw is the closest listed Fly region to CDMX (Fly has no Mexico region).
+# Durable data lives in Supabase and R2 — no Fly Volume. Secrets are set with
+# `fly secrets set` (see README), never committed here.
+app = "citycrawl-api"
+primary_region = "dfw"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "get"
+    path = "/health/live"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"
+  cpus = 1

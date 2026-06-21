@@ -154,6 +154,18 @@ export interface RegionOption {
   count: number;
 }
 
+// A model-provided priority cluster (POTHOLE-specific). The frontend RECEIVES a list
+// of these from the optimization model and only VISUALIZES them — it never computes
+// priority. `weight` is the model's cluster priority (0..1). Reserved for the server-
+// side planning endpoint (see citycrawlApi.clusterPriorities); not rendered on the map.
+export interface ClusteredPriority {
+  id: string;
+  weight: number; // model-provided, normalized 0..1 — the region color driver
+  polygon: [number, number][]; // region hull, [lat,lng] pairs
+  centroid: { lat: number; lng: number };
+  count: number;
+}
+
 // What the optimization module receives (mock today, Cloudflare Worker later).
 export interface AnalysisPoint {
   id: string;
@@ -174,6 +186,17 @@ export interface AnalysisRequest {
   points: AnalysisPoint[];
 }
 
+// Editable draft returned by the LLM draft-parser endpoint (/v1/llm/drafts:parse). Scalars
+// may be null; list fields are always arrays. Populates the dock for review — never auto-runs.
+export interface PlanDraft {
+  issueType: string | null;
+  budget: number | null;
+  regionFilter: string[];
+  squadCount: number | null;
+  unresolvedTerms: string[];
+  warnings: string[];
+}
+
 export interface TopCritical {
   id: string;
   slug: string;
@@ -188,6 +211,7 @@ export interface TopCritical {
 export interface Squad {
   idx: number;
   color: string;
+  weight: number; // model-provided cluster priority, normalized 0..1 — the region color driver
   members: string[]; // pothole ids in this squad's cluster
   polygon: [number, number][]; // convex hull, [lat,lng] pairs
   centroid: { lat: number; lng: number };

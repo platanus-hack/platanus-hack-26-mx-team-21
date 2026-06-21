@@ -22,9 +22,12 @@ pts as (
   select
     p.gi,
     z.zone, z.in_b,
-    -- golden-angle spiral inside 0.6*half of the center => guaranteed inside the AGEM box
-    z.clat + (0.6*z.half) * sqrt(((p.gi*7) % 23)::numeric/23.0) * cos(p.gi*2.399963) as lat,
-    z.clng + (0.6*z.half) * sqrt(((p.gi*7) % 23)::numeric/23.0) * sin(p.gi*2.399963) as lng,
+    -- Natural deterministic scatter (md5(gi) jitter), NOT a synthetic spiral. Each axis
+    -- uses the mean of two md5 bytes -> triangular spread, denser near the zone center
+    -- like a real hotspot. Per-axis offset stays within ±0.75*half, so every point
+    -- remains inside the zone's AGEM envelope (clat/clng ± half) and geo binding holds.
+    z.clat + ((get_byte(decode(md5('lat'||p.gi),'hex'),0) + get_byte(decode(md5('lat'||p.gi),'hex'),1))::numeric/510.0 - 0.5) * 1.5 * z.half as lat,
+    z.clng + ((get_byte(decode(md5('lng'||p.gi),'hex'),0) + get_byte(decode(md5('lng'||p.gi),'hex'),1))::numeric/510.0 - 0.5) * 1.5 * z.half as lng,
     1 + (p.gi % 5) as type_ix  -- 1..5
   from placed p join zones z on z.zi = p.zi
 )

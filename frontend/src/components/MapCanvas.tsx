@@ -1,19 +1,16 @@
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import L from "leaflet";
 import type { Observation, PlanResult, Roi } from "../lib/types";
-import { clusterIndices, convexHull, volumeColor, volumeRadius } from "../lib/geo";
+import { volumeColor } from "../lib/geo";
 import { riskLabel } from "../lib/analysis";
 
 interface Props {
   observations: Observation[];
   boundary: unknown | null;
   showPins: boolean;
-  showZones: boolean;
   showRois: boolean;
   activeTypes: Record<string, boolean>;
-  issueType: string;
-  squadTarget: number;
-  plan: PlanResult | null; // non-null while previewing
+  plan: PlanResult | null; // non-null while previewing a generated plan
   rois: Roi[];
   selectedId: string | null;
   accent: string;
@@ -23,8 +20,10 @@ interface Props {
 }
 
 const CARTO_LIGHT = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
+const PIN_RADIUS = 6; // fixed — pins encode volume by COLOR only, never by size
+const ROI_LABEL_ZOOM = 13; // risk-zone labels only appear once zoomed in this far
 
-export function MapCanvas(props: Props) {
+export const MapCanvas = memo(function MapCanvas(props: Props) {
   const elRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const rendererRef = useRef<L.Canvas | null>(null);
@@ -32,6 +31,18 @@ export function MapCanvas(props: Props) {
   const fitKeyRef = useRef<string>("");
   const onSelectRef = useRef(props.onSelect);
   onSelectRef.current = props.onSelect;
+  const showRoisRef = useRef(props.showRois);
+  showRoisRef.current = props.showRois;
+
+  // Show/hide the ROI label layer depending on zoom (and the ROI toggle).
+  const syncRoiLabels = () => {
+    const map = mapRef.current;
+    const labels = groups.current.roiLabels;
+    if (!map || !labels) return;
+    const visible = showRoisRef.current && map.getZoom() >= ROI_LABEL_ZOOM;
+    if (visible && !map.hasLayer(labels)) labels.addTo(map);
+    else if (!visible && map.hasLayer(labels)) map.removeLayer(labels);
+  };
 
   // ---- init once ----------------------------------------------------------
   useEffect(() => {
@@ -52,11 +63,12 @@ export function MapCanvas(props: Props) {
     rendererRef.current = renderer;
     groups.current = {
       boundary: L.layerGroup().addTo(map),
-      zones: L.layerGroup().addTo(map),
       rois: L.layerGroup().addTo(map),
+      roiLabels: L.layerGroup(), // added/removed by zoom, see syncRoiLabels
       pins: L.layerGroup().addTo(map),
       plan: L.layerGroup().addTo(map),
     };
+    map.on("zoomend", syncRoiLabels);
     setTimeout(() => map.invalidateSize(false), 0);
     return () => {
       map.remove();
@@ -64,7 +76,7 @@ export function MapCanvas(props: Props) {
     };
   }, []);
 
-  // ---- boundary -----------------------------------------------------------
+  // ---- boundary (subtle administrative outline, no heavy fill) -------------
   useEffect(() => {
     const g = groups.current.boundary;
     if (!g || !props.boundary) return;
@@ -75,11 +87,10 @@ export function MapCanvas(props: Props) {
         style: {
           color: "#aab2bd",
           weight: 1.3,
-          opacity: 0.8,
-          dashArray: "2 5",
+          opacity: 0.75,
           fill: true,
-          fillColor: "#9aa3b1",
-          fillOpacity: 0.02,
+          fillColor: "#aab2bd",
+          fillOpacity: 0.04,
         },
       }).addTo(g);
     } catch {
@@ -87,76 +98,31 @@ export function MapCanvas(props: Props) {
     }
   }, [props.boundary]);
 
-  // ---- generic cluster zones (always-available spatial-priority view) ------
-  // Hidden while a plan is previewing (the plan's squads take over).
-  useEffect(() => {
-    const g = groups.current.zones;
-    const r = rendererRef.current;
-    if (!g || !r) return;
-    g.clearLayers();
-    if (!props.showZones || props.plan) return;
-    const pts = props.observations.filter(
-      (o) => o.slug === props.issueType && props.activeTypes[o.slug] && o.volume != null,
-    );
-    if (pts.length < 2) return;
-    const groupsIdx = clusterIndices(pts, props.squadTarget);
-    for (const idxs of groupsIdx) {
-      const members = idxs.map((i) => pts[i]);
-      if (members.length >= 3) {
-        L.polygon(convexHull(members), {
-          renderer: r,
-          color: props.accent,
-          weight: 1.4,
-          opacity: 0.6,
-          dashArray: "5 4",
-          fill: true,
-          fillColor: props.accent,
-          fillOpacity: 0.06,
-          interactive: false,
-        }).addTo(g);
-      } else {
-        const c = members[0];
-        L.circle([c.lat, c.lng], {
-          renderer: r,
-          radius: 380,
-          color: props.accent,
-          weight: 1.4,
-          opacity: 0.6,
-          dashArray: "5 4",
-          fill: true,
-          fillColor: props.accent,
-          fillOpacity: 0.06,
-          interactive: false,
-        }).addTo(g);
-      }
-    }
-  }, [
-    props.observations,
-    props.showZones,
-    props.plan,
-    props.activeTypes,
-    props.issueType,
-    props.squadTarget,
-    props.accent,
-  ]);
-
   // ---- risk-ROIs (external dataset) — toggleable standalone layer ----------
+  // Polygons live in the `rois` group; labels live in `roiLabels`, which is only
+  // attached when zoomed in (ROI_LABEL_ZOOM) so labels never clutter the overview.
   useEffect(() => {
     const g = groups.current.rois;
-    if (!g) return;
+    const gl = groups.current.roiLabels;
+    if (!g || !gl) return;
     g.clearLayers();
-    if (!props.showRois) return;
+    gl.clearLayers();
+    if (!props.showRois) {
+      syncRoiLabels();
+      return;
+    }
     for (const roi of props.rois) {
       try {
         L.geoJSON({ type: "Feature", geometry: roi.geojson, properties: {} } as never, {
           interactive: false,
           style: {
             color: "#e5484d",
-            weight: 1.8,
+            weight: 1.6,
+            opacity: 0.7,
             dashArray: "5 4",
             fill: true,
             fillColor: "#e5484d",
-            fillOpacity: 0.07,
+            fillOpacity: 0.06,
           },
         }).addTo(g);
       } catch {
@@ -169,11 +135,12 @@ export function MapCanvas(props: Props) {
           html: `<div style="background:#fff;color:#c2333a;font:600 9.5px IBM Plex Mono,monospace;padding:2px 7px;border-radius:6px;white-space:nowrap;border:1px solid #f4cdcd;box-shadow:0 3px 9px -3px rgba(197,51,58,.4);transform:translate(-50%,-50%);">${riskLabel(roi.riskDimension)}</div>`,
           iconSize: [0, 0],
         }),
-      }).addTo(g);
+      }).addTo(gl);
     }
+    syncRoiLabels();
   }, [props.rois, props.showRois]);
 
-  // ---- pins by volume -----------------------------------------------------
+  // ---- pins — fixed size, colored by volume metadata only -----------------
   useEffect(() => {
     const g = groups.current.pins;
     const r = rendererRef.current;
@@ -187,10 +154,10 @@ export function MapCanvas(props: Props) {
     for (const o of props.observations) {
       if (!props.activeTypes[o.slug]) continue;
       if (o.volume == null) {
-        // pending / no volume → neutral dashed
+        // pending / no volume → neutral dashed (same size as the rest)
         L.circleMarker([o.lat, o.lng], {
           renderer: r,
-          radius: 4.5,
+          radius: PIN_RADIUS,
           color: "#9aa3b1",
           weight: 1.3,
           opacity: 0.85,
@@ -203,7 +170,7 @@ export function MapCanvas(props: Props) {
       } else {
         L.circleMarker([o.lat, o.lng], {
           renderer: r,
-          radius: volumeRadius(o.volume, maxVol),
+          radius: PIN_RADIUS,
           color: "#fff",
           weight: 1.3,
           opacity: 0.95,
@@ -216,7 +183,10 @@ export function MapCanvas(props: Props) {
     }
   }, [props.observations, props.showPins, props.activeTypes]);
 
-  // ---- plan preview overlay (squad clusters + top-critical markers) -------
+  // ---- plan preview overlay (crew clusters + ranked markers) --------------
+  // Crews (cuadrillas) are a DISPATCH concept: each gets a categorical color so they
+  // read as distinct teams — NOT the priority ramp (that's the priority-zone layer).
+  // Nothing here renders unless a plan is present.
   useEffect(() => {
     const g = groups.current.plan;
     const r = rendererRef.current;
@@ -225,45 +195,39 @@ export function MapCanvas(props: Props) {
     const plan = props.plan;
     if (!plan) return;
 
+    // 1. Crew regions — categorical color per crew, drawn as the cluster's hull polygon.
+    // (A cluster needs ≥3 points to form a polygon; smaller ones show only their hub chip.)
     for (const sq of plan.squads) {
-      if (sq.polygon.length >= 3) {
-        L.polygon(sq.polygon, {
-          renderer: r,
-          color: sq.color,
-          weight: 2,
-          opacity: 0.9,
-          fill: true,
-          fillColor: sq.color,
-          fillOpacity: 0.12,
-          interactive: false,
-        }).addTo(g);
-      } else {
-        L.circle([sq.centroid.lat, sq.centroid.lng], {
-          renderer: r,
-          radius: 420,
-          color: sq.color,
-          weight: 2,
-          opacity: 0.9,
-          fill: true,
-          fillColor: sq.color,
-          fillOpacity: 0.12,
-          interactive: false,
-        }).addTo(g);
-      }
+      if (sq.polygon.length < 3) continue;
+      L.polygon(sq.polygon, {
+        renderer: r,
+        color: sq.color,
+        weight: 1.5,
+        opacity: 0.85,
+        fill: true,
+        fillColor: sq.color,
+        fillOpacity: 0.14,
+        interactive: false,
+      }).addTo(g);
+    }
+
+    // 2. Centroid hubs — chip in the crew color.
+    for (const sq of plan.squads) {
       L.marker([sq.centroid.lat, sq.centroid.lng], {
         interactive: false,
         icon: L.divIcon({
           className: "",
-          html: `<div style="background:${sq.color};color:#fff;font:700 9px IBM Plex Mono,monospace;padding:2px 6px;border-radius:6px;white-space:nowrap;box-shadow:0 3px 9px -3px rgba(20,30,50,.5);transform:translate(-50%,-50%);">C${sq.idx} · ${sq.count}</div>`,
+          html: `<div style="background:${sq.color};color:#fff;font:700 9px IBM Plex Mono,monospace;padding:2px 7px;border-radius:7px;white-space:nowrap;box-shadow:0 3px 9px -3px rgba(20,30,50,.4);transform:translate(-50%,-50%);">C${sq.idx} · ${sq.count}</div>`,
           iconSize: [0, 0],
         }),
       }).addTo(g);
     }
 
+    // 3. Ranked top-critical markers (a plan annotation — numbered, not a data pin).
     for (const tc of plan.topCritical) {
       L.circleMarker([tc.lat, tc.lng], {
         renderer: r,
-        radius: 11,
+        radius: 10,
         color: "#fff",
         weight: 2,
         fillColor: props.accent,
@@ -282,7 +246,10 @@ export function MapCanvas(props: Props) {
     }
   }, [props.plan, props.accent]);
 
-  // ---- fit to the plan (dock/panel-aware padding) -------------------------
+  // ---- fit to the plan (panel-aware padding) ------------------------------
+  // NOTE: intentionally NOT keyed on dockOpen. Refitting fires a synchronous full-map
+  // reprojection; doing that on every dock open/close stutters the panel animation.
+  // A fixed bottom padding keeps plan content clear of the dock at its open height.
   useEffect(() => {
     const map = mapRef.current;
     const plan = props.plan;
@@ -290,7 +257,7 @@ export function MapCanvas(props: Props) {
     const ll: [number, number][] = plan.topCritical.map((t) => [t.lat, t.lng]);
     for (const sq of plan.squads) for (const p of sq.polygon) ll.push(p);
     if (!ll.length) return;
-    const key = `${plan.stats.count}_${plan.stats.spent}_${plan.squadCountUsed}_${props.dockOpen}`;
+    const key = `${plan.stats.count}_${plan.stats.spent}_${plan.squadCountUsed}`;
     if (key === fitKeyRef.current) return;
     fitKeyRef.current = key;
     try {
@@ -298,12 +265,12 @@ export function MapCanvas(props: Props) {
         maxZoom: 14,
         animate: false,
         paddingTopLeft: [80, 80],
-        paddingBottomRight: [404, props.dockOpen ? 200 : 90],
+        paddingBottomRight: [404, 200],
       });
     } catch {
       /* ignore */
     }
-  }, [props.plan, props.dockOpen]);
+  }, [props.plan]);
 
   // ---- pan to selection ---------------------------------------------------
   useEffect(() => {
@@ -321,4 +288,4 @@ export function MapCanvas(props: Props) {
   }, [props.panTarget]);
 
   return <div ref={elRef} style={{ position: "absolute", inset: 0, zIndex: 0 }} />;
-}
+});

@@ -6,12 +6,11 @@ interface Props {
   totalObs: number;
   roiCount: number;
   showPins: boolean;
-  showZones: boolean;
   showRois: boolean;
   activeTypes: Record<string, boolean>;
   lastSweepLabel: string;
+  bottom: number;
   onTogglePins: () => void;
-  onToggleZones: () => void;
   onToggleRois: () => void;
   onToggleType: (slug: string) => void;
   onSignOut: () => void;
@@ -57,7 +56,6 @@ const sectionLabel: React.CSSProperties = {
 
 export function LayersPanel(props: Props) {
   const pinCb = checkbox(props.showPins, "#2f64e6");
-  const zonesCb = checkbox(props.showZones, "#2f64e6");
   const roisCb = checkbox(props.showRois, "#e5484d");
 
   return (
@@ -66,6 +64,8 @@ export function LayersPanel(props: Props) {
         position: "absolute",
         top: 18,
         left: 18,
+        // lift the panel to a consistent gap above the action dock / launcher
+        bottom: props.bottom,
         zIndex: 500,
         width: 236,
         background: "rgba(255,255,255,.9)",
@@ -75,6 +75,8 @@ export function LayersPanel(props: Props) {
         borderRadius: 16,
         boxShadow: "0 18px 44px -26px rgba(20,30,50,.42),0 2px 6px -3px rgba(20,30,50,.12)",
         overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
       }}
     >
       {/* header */}
@@ -85,6 +87,7 @@ export function LayersPanel(props: Props) {
           display: "flex",
           alignItems: "center",
           gap: 10,
+          flex: "none",
         }}
       >
         <div
@@ -141,7 +144,7 @@ export function LayersPanel(props: Props) {
       </div>
 
       {/* body */}
-      <div style={{ padding: "12px 14px 14px" }}>
+      <div style={{ padding: "12px 14px 14px", flex: 1, minHeight: 0, overflowY: "auto" }} className="pp-scroll">
         <div style={{ ...sectionLabel, marginBottom: 8 }}>Capas</div>
 
         <button onClick={props.onTogglePins} style={rowBtn}>
@@ -163,20 +166,6 @@ export function LayersPanel(props: Props) {
           />
           <span style={{ fontSize: 9.5, color: "#aab2bd" }}>mayor volumen</span>
         </div>
-
-        <button onClick={props.onToggleZones} style={rowBtn}>
-          <span style={zonesCb.box}>{zonesCb.check}</span>
-          <span style={{ flex: 1, textAlign: "left", fontSize: 12.5, fontWeight: 600 }}>Zonas (clústeres)</span>
-          <span
-            style={{
-              width: 16,
-              height: 12,
-              borderRadius: 3,
-              border: "1.5px dashed #2f64e6",
-              background: "rgba(47,100,230,.08)",
-            }}
-          />
-        </button>
 
         <button onClick={props.onToggleRois} style={rowBtn}>
           <span style={roisCb.box}>{roisCb.check}</span>

@@ -1,0 +1,2582 @@
+{
+  "requests": [
+    {
+      "name": "empty",
+      "input": {
+        "issueType": "pothole",
+        "budget": 2000000,
+        "regionFilter": [],
+        "costs": {},
+        "points": []
+      },
+      "plan": {
+        "issueType": "pothole",
+        "budget": 2000000,
+        "regionFilter": [],
+        "squadCountUsed": 0,
+        "topCritical": [],
+        "squads": [],
+        "stats": {
+          "spent": 0,
+          "count": 0,
+          "squads": 0,
+          "regions": 0,
+          "volume": 0,
+          "budgetPct": 0
+        }
+      }
+    },
+    {
+      "name": "single",
+      "input": {
+        "issueType": "pothole",
+        "budget": 2000000,
+        "regionFilter": [],
+        "costs": {},
+        "points": [
+          {
+            "id": "p0",
+            "lat": 19.4,
+            "lng": -99.2,
+            "slug": "pothole",
+            "volume": 30,
+            "zone": "Norte",
+            "districtCve": "005"
+          }
+        ]
+      },
+      "plan": {
+        "issueType": "pothole",
+        "budget": 2000000,
+        "regionFilter": [],
+        "squadCountUsed": 1,
+        "topCritical": [
+          {
+            "id": "p0",
+            "slug": "pothole",
+            "lat": 19.4,
+            "lng": -99.2,
+            "volume": 30,
+            "cost": 150000,
+            "zone": "Norte",
+            "rank": 1
+          }
+        ],
+        "squads": [
+          {
+            "idx": 1,
+            "color": "#2f64e6",
+            "weight": 1,
+            "members": [
+              "p0"
+            ],
+            "polygon": [
+              [
+                19.4,
+                -99.2
+              ]
+            ],
+            "centroid": {
+              "lat": 19.4,
+              "lng": -99.2
+            },
+            "cost": 150000,
+            "count": 1
+          }
+        ],
+        "stats": {
+          "spent": 150000,
+          "count": 1,
+          "squads": 1,
+          "regions": 1,
+          "volume": 30,
+          "budgetPct": 8
+        }
+      }
+    },
+    {
+      "name": "budget_below_one",
+      "input": {
+        "issueType": "pothole",
+        "budget": 100000,
+        "regionFilter": [],
+        "costs": {},
+        "points": [
+          {
+            "id": "p0",
+            "lat": 19.4,
+            "lng": -99.2,
+            "slug": "pothole",
+            "volume": 30,
+            "zone": "Norte",
+            "districtCve": "005"
+          },
+          {
+            "id": "p1",
+            "lat": 19.416,
+            "lng": -99.203,
+            "slug": "pothole",
+            "volume": 67,
+            "zone": "Centro",
+            "districtCve": "006"
+          },
+          {
+            "id": "p2",
+            "lat": 19.432,
+            "lng": -99.191,
+            "slug": "pothole",
+            "volume": 104,
+            "zone": "Norte",
+            "districtCve": "007"
+          },
+          {
+            "id": "p3",
+            "lat": 19.436,
+            "lng": -99.194,
+            "slug": "pothole",
+            "volume": 141,
+            "zone": "Centro",
+            "districtCve": "005"
+          },
+          {
+            "id": "p4",
+            "lat": 19.451999999999998,
+            "lng": -99.17,
+            "slug": "pothole",
+            "volume": 178,
+            "zone": "Norte",
+            "districtCve": "006"
+          },
+          {
+            "id": "p5",
+            "lat": 19.467999999999996,
+            "lng": -99.173,
+            "slug": "pothole",
+            "volume": 215,
+            "zone": "Centro",
+            "districtCve": "007"
+          },
+          {
+            "id": "p6",
+            "lat": 19.471999999999998,
+            "lng": -99.161,
+            "slug": "pothole",
+            "volume": 32,
+            "zone": "Norte",
+            "districtCve": "005"
+          },
+          {
+            "id": "p7",
+            "lat": 19.404,
+            "lng": -99.164,
+            "slug": "pothole",
+            "volume": 69,
+            "zone": "Centro",
+            "districtCve": "006"
+          },
+          {
+            "id": "p8",
+            "lat": 19.419999999999998,
+            "lng": -99.14,
+            "slug": "pothole",
+            "volume": 106,
+            "zone": "Norte",
+            "districtCve": "007"
+          },
+          {
+            "id": "p9",
+            "lat": 19.424,
+            "lng": -99.143,
+            "slug": "pothole",
+            "volume": 143,
+            "zone": "Centro",
+            "districtCve": "005"
+          },
+          {
+            "id": "p10",
+            "lat": 19.44,
+            "lng": -99.131,
+            "slug": "pothole",
+            "volume": 180,
+            "zone": "Norte",
+            "districtCve": "006"
+          },
+          {
+            "id": "p11",
+            "lat": 19.455999999999996,
+            "lng": -99.134,
+            "slug": "pothole",
+            "volume": 217,
+            "zone": "Centro",
+            "districtCve": "007"
+          },
+          {
+            "id": "p12",
+            "lat": 19.459999999999997,
+            "lng": -99.11,
+            "slug": "pothole",
+            "volume": 34,
+            "zone": "Norte",
+            "districtCve": "005"
+          },
+          {
+            "id": "p13",
+            "lat": 19.476,
+            "lng": -99.113,
+            "slug": "pothole",
+            "volume": 71,
+            "zone": "Centro",
+            "districtCve": "006"
+          }
+        ]
+      },
+      "plan": {
+        "issueType": "pothole",
+        "budget": 100000,
+        "regionFilter": [],
+        "squadCountUsed": 0,
+        "topCritical": [],
+        "squads": [],
+        "stats": {
+          "spent": 0,
+          "count": 0,
+          "squads": 0,
+          "regions": 0,
+          "volume": 0,
+          "budgetPct": 0
+        }
+      }
+    },
+    {
+      "name": "budget_two_items",
+      "input": {
+        "issueType": "pothole",
+        "budget": 300000,
+        "regionFilter": [],
+        "costs": {},
+        "points": [
+          {
+            "id": "p0",
+            "lat": 19.4,
+            "lng": -99.2,
+            "slug": "pothole",
+            "volume": 30,
+            "zone": "Norte",
+            "districtCve": "005"
+          },
+          {
+            "id": "p1",
+            "lat": 19.416,
+            "lng": -99.203,
+            "slug": "pothole",
+            "volume": 67,
+            "zone": "Centro",
+            "districtCve": "006"
+          },
+          {
+            "id": "p2",
+            "lat": 19.432,
+            "lng": -99.191,
+            "slug": "pothole",
+            "volume": 104,
+            "zone": "Norte",
+            "districtCve": "007"
+          },
+          {
+            "id": "p3",
+            "lat": 19.436,
+            "lng": -99.194,
+            "slug": "pothole",
+            "volume": 141,
+            "zone": "Centro",
+            "districtCve": "005"
+          },
+          {
+            "id": "p4",
+            "lat": 19.451999999999998,
+            "lng": -99.17,
+            "slug": "pothole",
+            "volume": 178,
+            "zone": "Norte",
+            "districtCve": "006"
+          },
+          {
+            "id": "p5",
+            "lat": 19.467999999999996,
+            "lng": -99.173,
+            "slug": "pothole",
+            "volume": 215,
+            "zone": "Centro",
+            "districtCve": "007"
+          },
+          {
+            "id": "p6",
+            "lat": 19.471999999999998,
+            "lng": -99.161,
+            "slug": "pothole",
+            "volume": 32,
+            "zone": "Norte",
+            "districtCve": "005"
+          },
+          {
+            "id": "p7",
+            "lat": 19.404,
+            "lng": -99.164,
+            "slug": "pothole",
+            "volume": 69,
+            "zone": "Centro",
+            "districtCve": "006"
+          },
+          {
+            "id": "p8",
+            "lat": 19.419999999999998,
+            "lng": -99.14,
+            "slug": "pothole",
+            "volume": 106,
+            "zone": "Norte",
+            "districtCve": "007"
+          },
+          {
+            "id": "p9",
+            "lat": 19.424,
+            "lng": -99.143,
+            "slug": "pothole",
+            "volume": 143,
+            "zone": "Centro",
+            "districtCve": "005"
+          },
+          {
+            "id": "p10",
+            "lat": 19.44,
+            "lng": -99.131,
+            "slug": "pothole",
+            "volume": 180,
+            "zone": "Norte",
+            "districtCve": "006"
+          },
+          {
+            "id": "p11",
+            "lat": 19.455999999999996,
+            "lng": -99.134,
+            "slug": "pothole",
+            "volume": 217,
+            "zone": "Centro",
+            "districtCve": "007"
+          },
+          {
+            "id": "p12",
+            "lat": 19.459999999999997,
+            "lng": -99.11,
+            "slug": "pothole",
+            "volume": 34,
+            "zone": "Norte",
+            "districtCve": "005"
+          },
+          {
+            "id": "p13",
+            "lat": 19.476,
+            "lng": -99.113,
+            "slug": "pothole",
+            "volume": 71,
+            "zone": "Centro",
+            "districtCve": "006"
+          }
+        ]
+      },
+      "plan": {
+        "issueType": "pothole",
+        "budget": 300000,
+        "regionFilter": [],
+        "squadCountUsed": 2,
+        "topCritical": [
+          {
+            "id": "p11",
+            "slug": "pothole",
+            "lat": 19.455999999999996,
+            "lng": -99.134,
+            "volume": 217,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 1
+          },
+          {
+            "id": "p5",
+            "slug": "pothole",
+            "lat": 19.467999999999996,
+            "lng": -99.173,
+            "volume": 215,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 2
+          }
+        ],
+        "squads": [
+          {
+            "idx": 1,
+            "color": "#2f64e6",
+            "weight": 0.9907834101382489,
+            "members": [
+              "p5"
+            ],
+            "polygon": [
+              [
+                19.467999999999996,
+                -99.173
+              ]
+            ],
+            "centroid": {
+              "lat": 19.467999999999996,
+              "lng": -99.173
+            },
+            "cost": 150000,
+            "count": 1
+          },
+          {
+            "idx": 2,
+            "color": "#e5484d",
+            "weight": 1,
+            "members": [
+              "p11"
+            ],
+            "polygon": [
+              [
+                19.455999999999996,
+                -99.134
+              ]
+            ],
+            "centroid": {
+              "lat": 19.455999999999996,
+              "lng": -99.134
+            },
+            "cost": 150000,
+            "count": 1
+          }
+        ],
+        "stats": {
+          "spent": 300000,
+          "count": 2,
+          "squads": 2,
+          "regions": 1,
+          "volume": 432,
+          "budgetPct": 100
+        }
+      }
+    },
+    {
+      "name": "default_full",
+      "input": {
+        "issueType": "pothole",
+        "budget": 4000000,
+        "regionFilter": [],
+        "costs": {},
+        "points": [
+          {
+            "id": "p0",
+            "lat": 19.4,
+            "lng": -99.2,
+            "slug": "pothole",
+            "volume": 30,
+            "zone": "Norte",
+            "districtCve": "005"
+          },
+          {
+            "id": "p1",
+            "lat": 19.416,
+            "lng": -99.203,
+            "slug": "pothole",
+            "volume": 67,
+            "zone": "Centro",
+            "districtCve": "006"
+          },
+          {
+            "id": "p2",
+            "lat": 19.432,
+            "lng": -99.191,
+            "slug": "pothole",
+            "volume": 104,
+            "zone": "Norte",
+            "districtCve": "007"
+          },
+          {
+            "id": "p3",
+            "lat": 19.436,
+            "lng": -99.194,
+            "slug": "pothole",
+            "volume": 141,
+            "zone": "Centro",
+            "districtCve": "005"
+          },
+          {
+            "id": "p4",
+            "lat": 19.451999999999998,
+            "lng": -99.17,
+            "slug": "pothole",
+            "volume": 178,
+            "zone": "Norte",
+            "districtCve": "006"
+          },
+          {
+            "id": "p5",
+            "lat": 19.467999999999996,
+            "lng": -99.173,
+            "slug": "pothole",
+            "volume": 215,
+            "zone": "Centro",
+            "districtCve": "007"
+          },
+          {
+            "id": "p6",
+            "lat": 19.471999999999998,
+            "lng": -99.161,
+            "slug": "pothole",
+            "volume": 32,
+            "zone": "Norte",
+            "districtCve": "005"
+          },
+          {
+            "id": "p7",
+            "lat": 19.404,
+            "lng": -99.164,
+            "slug": "pothole",
+            "volume": 69,
+            "zone": "Centro",
+            "districtCve": "006"
+          },
+          {
+            "id": "p8",
+            "lat": 19.419999999999998,
+            "lng": -99.14,
+            "slug": "pothole",
+            "volume": 106,
+            "zone": "Norte",
+            "districtCve": "007"
+          },
+          {
+            "id": "p9",
+            "lat": 19.424,
+            "lng": -99.143,
+            "slug": "pothole",
+            "volume": 143,
+            "zone": "Centro",
+            "districtCve": "005"
+          },
+          {
+            "id": "p10",
+            "lat": 19.44,
+            "lng": -99.131,
+            "slug": "pothole",
+            "volume": 180,
+            "zone": "Norte",
+            "districtCve": "006"
+          },
+          {
+            "id": "p11",
+            "lat": 19.455999999999996,
+            "lng": -99.134,
+            "slug": "pothole",
+            "volume": 217,
+            "zone": "Centro",
+            "districtCve": "007"
+          },
+          {
+            "id": "p12",
+            "lat": 19.459999999999997,
+            "lng": -99.11,
+            "slug": "pothole",
+            "volume": 34,
+            "zone": "Norte",
+            "districtCve": "005"
+          },
+          {
+            "id": "p13",
+            "lat": 19.476,
+            "lng": -99.113,
+            "slug": "pothole",
+            "volume": 71,
+            "zone": "Centro",
+            "districtCve": "006"
+          }
+        ]
+      },
+      "plan": {
+        "issueType": "pothole",
+        "budget": 4000000,
+        "regionFilter": [],
+        "squadCountUsed": 3,
+        "topCritical": [
+          {
+            "id": "p11",
+            "slug": "pothole",
+            "lat": 19.455999999999996,
+            "lng": -99.134,
+            "volume": 217,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 1
+          },
+          {
+            "id": "p5",
+            "slug": "pothole",
+            "lat": 19.467999999999996,
+            "lng": -99.173,
+            "volume": 215,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 2
+          },
+          {
+            "id": "p10",
+            "slug": "pothole",
+            "lat": 19.44,
+            "lng": -99.131,
+            "volume": 180,
+            "cost": 150000,
+            "zone": "Norte",
+            "rank": 3
+          },
+          {
+            "id": "p4",
+            "slug": "pothole",
+            "lat": 19.451999999999998,
+            "lng": -99.17,
+            "volume": 178,
+            "cost": 150000,
+            "zone": "Norte",
+            "rank": 4
+          },
+          {
+            "id": "p9",
+            "slug": "pothole",
+            "lat": 19.424,
+            "lng": -99.143,
+            "volume": 143,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 5
+          },
+          {
+            "id": "p3",
+            "slug": "pothole",
+            "lat": 19.436,
+            "lng": -99.194,
+            "volume": 141,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 6
+          },
+          {
+            "id": "p8",
+            "slug": "pothole",
+            "lat": 19.419999999999998,
+            "lng": -99.14,
+            "volume": 106,
+            "cost": 150000,
+            "zone": "Norte",
+            "rank": 7
+          },
+          {
+            "id": "p2",
+            "slug": "pothole",
+            "lat": 19.432,
+            "lng": -99.191,
+            "volume": 104,
+            "cost": 150000,
+            "zone": "Norte",
+            "rank": 8
+          },
+          {
+            "id": "p13",
+            "slug": "pothole",
+            "lat": 19.476,
+            "lng": -99.113,
+            "volume": 71,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 9
+          },
+          {
+            "id": "p7",
+            "slug": "pothole",
+            "lat": 19.404,
+            "lng": -99.164,
+            "volume": 69,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 10
+          },
+          {
+            "id": "p1",
+            "slug": "pothole",
+            "lat": 19.416,
+            "lng": -99.203,
+            "volume": 67,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 11
+          },
+          {
+            "id": "p12",
+            "slug": "pothole",
+            "lat": 19.459999999999997,
+            "lng": -99.11,
+            "volume": 34,
+            "cost": 150000,
+            "zone": "Norte",
+            "rank": 12
+          },
+          {
+            "id": "p6",
+            "slug": "pothole",
+            "lat": 19.471999999999998,
+            "lng": -99.161,
+            "volume": 32,
+            "cost": 150000,
+            "zone": "Norte",
+            "rank": 13
+          },
+          {
+            "id": "p0",
+            "slug": "pothole",
+            "lat": 19.4,
+            "lng": -99.2,
+            "volume": 30,
+            "cost": 150000,
+            "zone": "Norte",
+            "rank": 14
+          }
+        ],
+        "squads": [
+          {
+            "idx": 1,
+            "color": "#2f64e6",
+            "weight": 0.5472703062583223,
+            "members": [
+              "p3",
+              "p2",
+              "p7",
+              "p1",
+              "p0"
+            ],
+            "polygon": [
+              [
+                19.416,
+                -99.203
+              ],
+              [
+                19.4,
+                -99.2
+              ],
+              [
+                19.404,
+                -99.164
+              ],
+              [
+                19.436,
+                -99.194
+              ]
+            ],
+            "centroid": {
+              "lat": 19.4176,
+              "lng": -99.19039999999998
+            },
+            "cost": 750000,
+            "count": 5
+          },
+          {
+            "idx": 2,
+            "color": "#e5484d",
+            "weight": 0.5659121171770972,
+            "members": [
+              "p5",
+              "p4",
+              "p6"
+            ],
+            "polygon": [
+              [
+                19.467999999999996,
+                -99.173
+              ],
+              [
+                19.451999999999998,
+                -99.17
+              ],
+              [
+                19.471999999999998,
+                -99.161
+              ]
+            ],
+            "centroid": {
+              "lat": 19.464,
+              "lng": -99.168
+            },
+            "cost": 450000,
+            "count": 3
+          },
+          {
+            "idx": 3,
+            "color": "#0f9b8e",
+            "weight": 1,
+            "members": [
+              "p11",
+              "p10",
+              "p9",
+              "p8",
+              "p13",
+              "p12"
+            ],
+            "polygon": [
+              [
+                19.424,
+                -99.143
+              ],
+              [
+                19.419999999999998,
+                -99.14
+              ],
+              [
+                19.459999999999997,
+                -99.11
+              ],
+              [
+                19.476,
+                -99.113
+              ],
+              [
+                19.455999999999996,
+                -99.134
+              ]
+            ],
+            "centroid": {
+              "lat": 19.445999999999998,
+              "lng": -99.12849999999999
+            },
+            "cost": 900000,
+            "count": 6
+          }
+        ],
+        "stats": {
+          "spent": 2100000,
+          "count": 14,
+          "squads": 3,
+          "regions": 3,
+          "volume": 1587,
+          "budgetPct": 53
+        }
+      }
+    },
+    {
+      "name": "excessive_squads",
+      "input": {
+        "issueType": "pothole",
+        "budget": 4000000,
+        "regionFilter": [],
+        "costs": {},
+        "points": [
+          {
+            "id": "p0",
+            "lat": 19.4,
+            "lng": -99.2,
+            "slug": "pothole",
+            "volume": 30,
+            "zone": "Norte",
+            "districtCve": "005"
+          },
+          {
+            "id": "p1",
+            "lat": 19.416,
+            "lng": -99.203,
+            "slug": "pothole",
+            "volume": 67,
+            "zone": "Centro",
+            "districtCve": "006"
+          },
+          {
+            "id": "p2",
+            "lat": 19.432,
+            "lng": -99.191,
+            "slug": "pothole",
+            "volume": 104,
+            "zone": "Norte",
+            "districtCve": "007"
+          },
+          {
+            "id": "p3",
+            "lat": 19.436,
+            "lng": -99.194,
+            "slug": "pothole",
+            "volume": 141,
+            "zone": "Centro",
+            "districtCve": "005"
+          },
+          {
+            "id": "p4",
+            "lat": 19.451999999999998,
+            "lng": -99.17,
+            "slug": "pothole",
+            "volume": 178,
+            "zone": "Norte",
+            "districtCve": "006"
+          },
+          {
+            "id": "p5",
+            "lat": 19.467999999999996,
+            "lng": -99.173,
+            "slug": "pothole",
+            "volume": 215,
+            "zone": "Centro",
+            "districtCve": "007"
+          },
+          {
+            "id": "p6",
+            "lat": 19.471999999999998,
+            "lng": -99.161,
+            "slug": "pothole",
+            "volume": 32,
+            "zone": "Norte",
+            "districtCve": "005"
+          },
+          {
+            "id": "p7",
+            "lat": 19.404,
+            "lng": -99.164,
+            "slug": "pothole",
+            "volume": 69,
+            "zone": "Centro",
+            "districtCve": "006"
+          },
+          {
+            "id": "p8",
+            "lat": 19.419999999999998,
+            "lng": -99.14,
+            "slug": "pothole",
+            "volume": 106,
+            "zone": "Norte",
+            "districtCve": "007"
+          },
+          {
+            "id": "p9",
+            "lat": 19.424,
+            "lng": -99.143,
+            "slug": "pothole",
+            "volume": 143,
+            "zone": "Centro",
+            "districtCve": "005"
+          },
+          {
+            "id": "p10",
+            "lat": 19.44,
+            "lng": -99.131,
+            "slug": "pothole",
+            "volume": 180,
+            "zone": "Norte",
+            "districtCve": "006"
+          },
+          {
+            "id": "p11",
+            "lat": 19.455999999999996,
+            "lng": -99.134,
+            "slug": "pothole",
+            "volume": 217,
+            "zone": "Centro",
+            "districtCve": "007"
+          },
+          {
+            "id": "p12",
+            "lat": 19.459999999999997,
+            "lng": -99.11,
+            "slug": "pothole",
+            "volume": 34,
+            "zone": "Norte",
+            "districtCve": "005"
+          },
+          {
+            "id": "p13",
+            "lat": 19.476,
+            "lng": -99.113,
+            "slug": "pothole",
+            "volume": 71,
+            "zone": "Centro",
+            "districtCve": "006"
+          }
+        ],
+        "squadCount": 50
+      },
+      "plan": {
+        "issueType": "pothole",
+        "budget": 4000000,
+        "regionFilter": [],
+        "squadCountUsed": 8,
+        "topCritical": [
+          {
+            "id": "p11",
+            "slug": "pothole",
+            "lat": 19.455999999999996,
+            "lng": -99.134,
+            "volume": 217,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 1
+          },
+          {
+            "id": "p5",
+            "slug": "pothole",
+            "lat": 19.467999999999996,
+            "lng": -99.173,
+            "volume": 215,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 2
+          },
+          {
+            "id": "p10",
+            "slug": "pothole",
+            "lat": 19.44,
+            "lng": -99.131,
+            "volume": 180,
+            "cost": 150000,
+            "zone": "Norte",
+            "rank": 3
+          },
+          {
+            "id": "p4",
+            "slug": "pothole",
+            "lat": 19.451999999999998,
+            "lng": -99.17,
+            "volume": 178,
+            "cost": 150000,
+            "zone": "Norte",
+            "rank": 4
+          },
+          {
+            "id": "p9",
+            "slug": "pothole",
+            "lat": 19.424,
+            "lng": -99.143,
+            "volume": 143,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 5
+          },
+          {
+            "id": "p3",
+            "slug": "pothole",
+            "lat": 19.436,
+            "lng": -99.194,
+            "volume": 141,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 6
+          },
+          {
+            "id": "p8",
+            "slug": "pothole",
+            "lat": 19.419999999999998,
+            "lng": -99.14,
+            "volume": 106,
+            "cost": 150000,
+            "zone": "Norte",
+            "rank": 7
+          },
+          {
+            "id": "p2",
+            "slug": "pothole",
+            "lat": 19.432,
+            "lng": -99.191,
+            "volume": 104,
+            "cost": 150000,
+            "zone": "Norte",
+            "rank": 8
+          },
+          {
+            "id": "p13",
+            "slug": "pothole",
+            "lat": 19.476,
+            "lng": -99.113,
+            "volume": 71,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 9
+          },
+          {
+            "id": "p7",
+            "slug": "pothole",
+            "lat": 19.404,
+            "lng": -99.164,
+            "volume": 69,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 10
+          },
+          {
+            "id": "p1",
+            "slug": "pothole",
+            "lat": 19.416,
+            "lng": -99.203,
+            "volume": 67,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 11
+          },
+          {
+            "id": "p12",
+            "slug": "pothole",
+            "lat": 19.459999999999997,
+            "lng": -99.11,
+            "volume": 34,
+            "cost": 150000,
+            "zone": "Norte",
+            "rank": 12
+          },
+          {
+            "id": "p6",
+            "slug": "pothole",
+            "lat": 19.471999999999998,
+            "lng": -99.161,
+            "volume": 32,
+            "cost": 150000,
+            "zone": "Norte",
+            "rank": 13
+          },
+          {
+            "id": "p0",
+            "slug": "pothole",
+            "lat": 19.4,
+            "lng": -99.2,
+            "volume": 30,
+            "cost": 150000,
+            "zone": "Norte",
+            "rank": 14
+          }
+        ],
+        "squads": [
+          {
+            "idx": 1,
+            "color": "#2f64e6",
+            "weight": 0.24433249370277077,
+            "members": [
+              "p1",
+              "p0"
+            ],
+            "polygon": [
+              [
+                19.416,
+                -99.203
+              ],
+              [
+                19.4,
+                -99.2
+              ]
+            ],
+            "centroid": {
+              "lat": 19.408,
+              "lng": -99.20150000000001
+            },
+            "cost": 300000,
+            "count": 2
+          },
+          {
+            "idx": 2,
+            "color": "#e5484d",
+            "weight": 0.6171284634760705,
+            "members": [
+              "p3",
+              "p2"
+            ],
+            "polygon": [
+              [
+                19.436,
+                -99.194
+              ],
+              [
+                19.432,
+                -99.191
+              ]
+            ],
+            "centroid": {
+              "lat": 19.433999999999997,
+              "lng": -99.1925
+            },
+            "cost": 300000,
+            "count": 2
+          },
+          {
+            "idx": 3,
+            "color": "#0f9b8e",
+            "weight": 0.9899244332493703,
+            "members": [
+              "p5",
+              "p4"
+            ],
+            "polygon": [
+              [
+                19.467999999999996,
+                -99.173
+              ],
+              [
+                19.451999999999998,
+                -99.17
+              ]
+            ],
+            "centroid": {
+              "lat": 19.459999999999997,
+              "lng": -99.17150000000001
+            },
+            "cost": 300000,
+            "count": 2
+          },
+          {
+            "idx": 4,
+            "color": "#f5a623",
+            "weight": 0.17380352644836272,
+            "members": [
+              "p7"
+            ],
+            "polygon": [
+              [
+                19.404,
+                -99.164
+              ]
+            ],
+            "centroid": {
+              "lat": 19.404,
+              "lng": -99.164
+            },
+            "cost": 150000,
+            "count": 1
+          },
+          {
+            "idx": 5,
+            "color": "#7c3aed",
+            "weight": 0.08060453400503778,
+            "members": [
+              "p6"
+            ],
+            "polygon": [
+              [
+                19.471999999999998,
+                -99.161
+              ]
+            ],
+            "centroid": {
+              "lat": 19.471999999999998,
+              "lng": -99.161
+            },
+            "cost": 150000,
+            "count": 1
+          },
+          {
+            "idx": 6,
+            "color": "#d6409f",
+            "weight": 0.6272040302267002,
+            "members": [
+              "p9",
+              "p8"
+            ],
+            "polygon": [
+              [
+                19.424,
+                -99.143
+              ],
+              [
+                19.419999999999998,
+                -99.14
+              ]
+            ],
+            "centroid": {
+              "lat": 19.421999999999997,
+              "lng": -99.14150000000001
+            },
+            "cost": 300000,
+            "count": 2
+          },
+          {
+            "idx": 7,
+            "color": "#1d7a4d",
+            "weight": 1,
+            "members": [
+              "p11",
+              "p10"
+            ],
+            "polygon": [
+              [
+                19.455999999999996,
+                -99.134
+              ],
+              [
+                19.44,
+                -99.131
+              ]
+            ],
+            "centroid": {
+              "lat": 19.448,
+              "lng": -99.1325
+            },
+            "cost": 300000,
+            "count": 2
+          },
+          {
+            "idx": 8,
+            "color": "#c2410c",
+            "weight": 0.26448362720403024,
+            "members": [
+              "p13",
+              "p12"
+            ],
+            "polygon": [
+              [
+                19.476,
+                -99.113
+              ],
+              [
+                19.459999999999997,
+                -99.11
+              ]
+            ],
+            "centroid": {
+              "lat": 19.467999999999996,
+              "lng": -99.1115
+            },
+            "cost": 300000,
+            "count": 2
+          }
+        ],
+        "stats": {
+          "spent": 2100000,
+          "count": 14,
+          "squads": 8,
+          "regions": 3,
+          "volume": 1587,
+          "budgetPct": 53
+        }
+      }
+    },
+    {
+      "name": "negative_squads",
+      "input": {
+        "issueType": "pothole",
+        "budget": 4000000,
+        "regionFilter": [],
+        "costs": {},
+        "points": [
+          {
+            "id": "p0",
+            "lat": 19.4,
+            "lng": -99.2,
+            "slug": "pothole",
+            "volume": 30,
+            "zone": "Norte",
+            "districtCve": "005"
+          },
+          {
+            "id": "p1",
+            "lat": 19.416,
+            "lng": -99.203,
+            "slug": "pothole",
+            "volume": 67,
+            "zone": "Centro",
+            "districtCve": "006"
+          },
+          {
+            "id": "p2",
+            "lat": 19.432,
+            "lng": -99.191,
+            "slug": "pothole",
+            "volume": 104,
+            "zone": "Norte",
+            "districtCve": "007"
+          },
+          {
+            "id": "p3",
+            "lat": 19.436,
+            "lng": -99.194,
+            "slug": "pothole",
+            "volume": 141,
+            "zone": "Centro",
+            "districtCve": "005"
+          },
+          {
+            "id": "p4",
+            "lat": 19.451999999999998,
+            "lng": -99.17,
+            "slug": "pothole",
+            "volume": 178,
+            "zone": "Norte",
+            "districtCve": "006"
+          },
+          {
+            "id": "p5",
+            "lat": 19.467999999999996,
+            "lng": -99.173,
+            "slug": "pothole",
+            "volume": 215,
+            "zone": "Centro",
+            "districtCve": "007"
+          },
+          {
+            "id": "p6",
+            "lat": 19.471999999999998,
+            "lng": -99.161,
+            "slug": "pothole",
+            "volume": 32,
+            "zone": "Norte",
+            "districtCve": "005"
+          },
+          {
+            "id": "p7",
+            "lat": 19.404,
+            "lng": -99.164,
+            "slug": "pothole",
+            "volume": 69,
+            "zone": "Centro",
+            "districtCve": "006"
+          },
+          {
+            "id": "p8",
+            "lat": 19.419999999999998,
+            "lng": -99.14,
+            "slug": "pothole",
+            "volume": 106,
+            "zone": "Norte",
+            "districtCve": "007"
+          },
+          {
+            "id": "p9",
+            "lat": 19.424,
+            "lng": -99.143,
+            "slug": "pothole",
+            "volume": 143,
+            "zone": "Centro",
+            "districtCve": "005"
+          },
+          {
+            "id": "p10",
+            "lat": 19.44,
+            "lng": -99.131,
+            "slug": "pothole",
+            "volume": 180,
+            "zone": "Norte",
+            "districtCve": "006"
+          },
+          {
+            "id": "p11",
+            "lat": 19.455999999999996,
+            "lng": -99.134,
+            "slug": "pothole",
+            "volume": 217,
+            "zone": "Centro",
+            "districtCve": "007"
+          },
+          {
+            "id": "p12",
+            "lat": 19.459999999999997,
+            "lng": -99.11,
+            "slug": "pothole",
+            "volume": 34,
+            "zone": "Norte",
+            "districtCve": "005"
+          },
+          {
+            "id": "p13",
+            "lat": 19.476,
+            "lng": -99.113,
+            "slug": "pothole",
+            "volume": 71,
+            "zone": "Centro",
+            "districtCve": "006"
+          }
+        ],
+        "squadCount": -3
+      },
+      "plan": {
+        "issueType": "pothole",
+        "budget": 4000000,
+        "regionFilter": [],
+        "squadCountUsed": 1,
+        "topCritical": [
+          {
+            "id": "p11",
+            "slug": "pothole",
+            "lat": 19.455999999999996,
+            "lng": -99.134,
+            "volume": 217,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 1
+          },
+          {
+            "id": "p5",
+            "slug": "pothole",
+            "lat": 19.467999999999996,
+            "lng": -99.173,
+            "volume": 215,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 2
+          },
+          {
+            "id": "p10",
+            "slug": "pothole",
+            "lat": 19.44,
+            "lng": -99.131,
+            "volume": 180,
+            "cost": 150000,
+            "zone": "Norte",
+            "rank": 3
+          },
+          {
+            "id": "p4",
+            "slug": "pothole",
+            "lat": 19.451999999999998,
+            "lng": -99.17,
+            "volume": 178,
+            "cost": 150000,
+            "zone": "Norte",
+            "rank": 4
+          },
+          {
+            "id": "p9",
+            "slug": "pothole",
+            "lat": 19.424,
+            "lng": -99.143,
+            "volume": 143,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 5
+          },
+          {
+            "id": "p3",
+            "slug": "pothole",
+            "lat": 19.436,
+            "lng": -99.194,
+            "volume": 141,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 6
+          },
+          {
+            "id": "p8",
+            "slug": "pothole",
+            "lat": 19.419999999999998,
+            "lng": -99.14,
+            "volume": 106,
+            "cost": 150000,
+            "zone": "Norte",
+            "rank": 7
+          },
+          {
+            "id": "p2",
+            "slug": "pothole",
+            "lat": 19.432,
+            "lng": -99.191,
+            "volume": 104,
+            "cost": 150000,
+            "zone": "Norte",
+            "rank": 8
+          },
+          {
+            "id": "p13",
+            "slug": "pothole",
+            "lat": 19.476,
+            "lng": -99.113,
+            "volume": 71,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 9
+          },
+          {
+            "id": "p7",
+            "slug": "pothole",
+            "lat": 19.404,
+            "lng": -99.164,
+            "volume": 69,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 10
+          },
+          {
+            "id": "p1",
+            "slug": "pothole",
+            "lat": 19.416,
+            "lng": -99.203,
+            "volume": 67,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 11
+          },
+          {
+            "id": "p12",
+            "slug": "pothole",
+            "lat": 19.459999999999997,
+            "lng": -99.11,
+            "volume": 34,
+            "cost": 150000,
+            "zone": "Norte",
+            "rank": 12
+          },
+          {
+            "id": "p6",
+            "slug": "pothole",
+            "lat": 19.471999999999998,
+            "lng": -99.161,
+            "volume": 32,
+            "cost": 150000,
+            "zone": "Norte",
+            "rank": 13
+          },
+          {
+            "id": "p0",
+            "slug": "pothole",
+            "lat": 19.4,
+            "lng": -99.2,
+            "volume": 30,
+            "cost": 150000,
+            "zone": "Norte",
+            "rank": 14
+          }
+        ],
+        "squads": [
+          {
+            "idx": 1,
+            "color": "#2f64e6",
+            "weight": 1,
+            "members": [
+              "p11",
+              "p5",
+              "p10",
+              "p4",
+              "p9",
+              "p3",
+              "p8",
+              "p2",
+              "p13",
+              "p7",
+              "p1",
+              "p12",
+              "p6",
+              "p0"
+            ],
+            "polygon": [
+              [
+                19.416,
+                -99.203
+              ],
+              [
+                19.4,
+                -99.2
+              ],
+              [
+                19.404,
+                -99.164
+              ],
+              [
+                19.419999999999998,
+                -99.14
+              ],
+              [
+                19.459999999999997,
+                -99.11
+              ],
+              [
+                19.476,
+                -99.113
+              ],
+              [
+                19.471999999999998,
+                -99.161
+              ],
+              [
+                19.467999999999996,
+                -99.173
+              ],
+              [
+                19.436,
+                -99.194
+              ]
+            ],
+            "centroid": {
+              "lat": 19.43971428571428,
+              "lng": -99.15907142857142
+            },
+            "cost": 2100000,
+            "count": 14
+          }
+        ],
+        "stats": {
+          "spent": 2100000,
+          "count": 14,
+          "squads": 1,
+          "regions": 3,
+          "volume": 1587,
+          "budgetPct": 53
+        }
+      }
+    },
+    {
+      "name": "region_filtered",
+      "input": {
+        "issueType": "pothole",
+        "budget": 2000000,
+        "regionFilter": [
+          "005",
+          "006"
+        ],
+        "costs": {},
+        "points": [
+          {
+            "id": "p0",
+            "lat": 19.4,
+            "lng": -99.2,
+            "slug": "pothole",
+            "volume": 30,
+            "zone": "Norte",
+            "districtCve": "005"
+          },
+          {
+            "id": "p1",
+            "lat": 19.416,
+            "lng": -99.203,
+            "slug": "pothole",
+            "volume": 67,
+            "zone": "Centro",
+            "districtCve": "006"
+          },
+          {
+            "id": "p2",
+            "lat": 19.432,
+            "lng": -99.191,
+            "slug": "pothole",
+            "volume": 104,
+            "zone": "Norte",
+            "districtCve": "007"
+          },
+          {
+            "id": "p3",
+            "lat": 19.436,
+            "lng": -99.194,
+            "slug": "pothole",
+            "volume": 141,
+            "zone": "Centro",
+            "districtCve": "005"
+          },
+          {
+            "id": "p4",
+            "lat": 19.451999999999998,
+            "lng": -99.17,
+            "slug": "pothole",
+            "volume": 178,
+            "zone": "Norte",
+            "districtCve": "006"
+          },
+          {
+            "id": "p5",
+            "lat": 19.467999999999996,
+            "lng": -99.173,
+            "slug": "pothole",
+            "volume": 215,
+            "zone": "Centro",
+            "districtCve": "007"
+          },
+          {
+            "id": "p6",
+            "lat": 19.471999999999998,
+            "lng": -99.161,
+            "slug": "pothole",
+            "volume": 32,
+            "zone": "Norte",
+            "districtCve": "005"
+          },
+          {
+            "id": "p7",
+            "lat": 19.404,
+            "lng": -99.164,
+            "slug": "pothole",
+            "volume": 69,
+            "zone": "Centro",
+            "districtCve": "006"
+          },
+          {
+            "id": "p8",
+            "lat": 19.419999999999998,
+            "lng": -99.14,
+            "slug": "pothole",
+            "volume": 106,
+            "zone": "Norte",
+            "districtCve": "007"
+          },
+          {
+            "id": "p9",
+            "lat": 19.424,
+            "lng": -99.143,
+            "slug": "pothole",
+            "volume": 143,
+            "zone": "Centro",
+            "districtCve": "005"
+          },
+          {
+            "id": "p10",
+            "lat": 19.44,
+            "lng": -99.131,
+            "slug": "pothole",
+            "volume": 180,
+            "zone": "Norte",
+            "districtCve": "006"
+          },
+          {
+            "id": "p11",
+            "lat": 19.455999999999996,
+            "lng": -99.134,
+            "slug": "pothole",
+            "volume": 217,
+            "zone": "Centro",
+            "districtCve": "007"
+          },
+          {
+            "id": "p12",
+            "lat": 19.459999999999997,
+            "lng": -99.11,
+            "slug": "pothole",
+            "volume": 34,
+            "zone": "Norte",
+            "districtCve": "005"
+          },
+          {
+            "id": "p13",
+            "lat": 19.476,
+            "lng": -99.113,
+            "slug": "pothole",
+            "volume": 71,
+            "zone": "Centro",
+            "districtCve": "006"
+          }
+        ]
+      },
+      "plan": {
+        "issueType": "pothole",
+        "budget": 2000000,
+        "regionFilter": [
+          "005",
+          "006"
+        ],
+        "squadCountUsed": 3,
+        "topCritical": [
+          {
+            "id": "p11",
+            "slug": "pothole",
+            "lat": 19.455999999999996,
+            "lng": -99.134,
+            "volume": 217,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 1
+          },
+          {
+            "id": "p5",
+            "slug": "pothole",
+            "lat": 19.467999999999996,
+            "lng": -99.173,
+            "volume": 215,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 2
+          },
+          {
+            "id": "p10",
+            "slug": "pothole",
+            "lat": 19.44,
+            "lng": -99.131,
+            "volume": 180,
+            "cost": 150000,
+            "zone": "Norte",
+            "rank": 3
+          },
+          {
+            "id": "p4",
+            "slug": "pothole",
+            "lat": 19.451999999999998,
+            "lng": -99.17,
+            "volume": 178,
+            "cost": 150000,
+            "zone": "Norte",
+            "rank": 4
+          },
+          {
+            "id": "p9",
+            "slug": "pothole",
+            "lat": 19.424,
+            "lng": -99.143,
+            "volume": 143,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 5
+          },
+          {
+            "id": "p3",
+            "slug": "pothole",
+            "lat": 19.436,
+            "lng": -99.194,
+            "volume": 141,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 6
+          },
+          {
+            "id": "p8",
+            "slug": "pothole",
+            "lat": 19.419999999999998,
+            "lng": -99.14,
+            "volume": 106,
+            "cost": 150000,
+            "zone": "Norte",
+            "rank": 7
+          },
+          {
+            "id": "p2",
+            "slug": "pothole",
+            "lat": 19.432,
+            "lng": -99.191,
+            "volume": 104,
+            "cost": 150000,
+            "zone": "Norte",
+            "rank": 8
+          },
+          {
+            "id": "p13",
+            "slug": "pothole",
+            "lat": 19.476,
+            "lng": -99.113,
+            "volume": 71,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 9
+          },
+          {
+            "id": "p7",
+            "slug": "pothole",
+            "lat": 19.404,
+            "lng": -99.164,
+            "volume": 69,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 10
+          },
+          {
+            "id": "p1",
+            "slug": "pothole",
+            "lat": 19.416,
+            "lng": -99.203,
+            "volume": 67,
+            "cost": 150000,
+            "zone": "Centro",
+            "rank": 11
+          },
+          {
+            "id": "p12",
+            "slug": "pothole",
+            "lat": 19.459999999999997,
+            "lng": -99.11,
+            "volume": 34,
+            "cost": 150000,
+            "zone": "Norte",
+            "rank": 12
+          },
+          {
+            "id": "p6",
+            "slug": "pothole",
+            "lat": 19.471999999999998,
+            "lng": -99.161,
+            "volume": 32,
+            "cost": 150000,
+            "zone": "Norte",
+            "rank": 13
+          }
+        ],
+        "squads": [
+          {
+            "idx": 1,
+            "color": "#2f64e6",
+            "weight": 0.507323568575233,
+            "members": [
+              "p3",
+              "p2",
+              "p7",
+              "p1"
+            ],
+            "polygon": [
+              [
+                19.416,
+                -99.203
+              ],
+              [
+                19.404,
+                -99.164
+              ],
+              [
+                19.436,
+                -99.194
+              ]
+            ],
+            "centroid": {
+              "lat": 19.421999999999997,
+              "lng": -99.18799999999999
+            },
+            "cost": 600000,
+            "count": 4
+          },
+          {
+            "idx": 2,
+            "color": "#e5484d",
+            "weight": 0.5659121171770972,
+            "members": [
+              "p5",
+              "p4",
+              "p6"
+            ],
+            "polygon": [
+              [
+                19.467999999999996,
+                -99.173
+              ],
+              [
+                19.451999999999998,
+                -99.17
+              ],
+              [
+                19.471999999999998,
+                -99.161
+              ]
+            ],
+            "centroid": {
+              "lat": 19.464,
+              "lng": -99.168
+            },
+            "cost": 450000,
+            "count": 3
+          },
+          {
+            "idx": 3,
+            "color": "#0f9b8e",
+            "weight": 1,
+            "members": [
+              "p11",
+              "p10",
+              "p9",
+              "p8",
+              "p13",
+              "p12"
+            ],
+            "polygon": [
+              [
+                19.424,
+                -99.143
+              ],
+              [
+                19.419999999999998,
+                -99.14
+              ],
+              [
+                19.459999999999997,
+                -99.11
+              ],
+              [
+                19.476,
+                -99.113
+              ],
+              [
+                19.455999999999996,
+                -99.134
+              ]
+            ],
+            "centroid": {
+              "lat": 19.445999999999998,
+              "lng": -99.12849999999999
+            },
+            "cost": 900000,
+            "count": 6
+          }
+        ],
+        "stats": {
+          "spent": 1950000,
+          "count": 13,
+          "squads": 3,
+          "regions": 3,
+          "volume": 1557,
+          "budgetPct": 98
+        }
+      }
+    }
+  ],
+  "clusters": [
+    {
+      "name": "all",
+      "points": [
+        {
+          "id": "p0",
+          "lat": 19.4,
+          "lng": -99.2,
+          "slug": "pothole",
+          "volume": 30,
+          "zone": "Norte",
+          "districtCve": "005"
+        },
+        {
+          "id": "p1",
+          "lat": 19.416,
+          "lng": -99.203,
+          "slug": "pothole",
+          "volume": 67,
+          "zone": "Centro",
+          "districtCve": "006"
+        },
+        {
+          "id": "p2",
+          "lat": 19.432,
+          "lng": -99.191,
+          "slug": "pothole",
+          "volume": 104,
+          "zone": "Norte",
+          "districtCve": "007"
+        },
+        {
+          "id": "p3",
+          "lat": 19.436,
+          "lng": -99.194,
+          "slug": "pothole",
+          "volume": 141,
+          "zone": "Centro",
+          "districtCve": "005"
+        },
+        {
+          "id": "p4",
+          "lat": 19.451999999999998,
+          "lng": -99.17,
+          "slug": "pothole",
+          "volume": 178,
+          "zone": "Norte",
+          "districtCve": "006"
+        },
+        {
+          "id": "p5",
+          "lat": 19.467999999999996,
+          "lng": -99.173,
+          "slug": "pothole",
+          "volume": 215,
+          "zone": "Centro",
+          "districtCve": "007"
+        },
+        {
+          "id": "p6",
+          "lat": 19.471999999999998,
+          "lng": -99.161,
+          "slug": "pothole",
+          "volume": 32,
+          "zone": "Norte",
+          "districtCve": "005"
+        },
+        {
+          "id": "p7",
+          "lat": 19.404,
+          "lng": -99.164,
+          "slug": "pothole",
+          "volume": 69,
+          "zone": "Centro",
+          "districtCve": "006"
+        },
+        {
+          "id": "p8",
+          "lat": 19.419999999999998,
+          "lng": -99.14,
+          "slug": "pothole",
+          "volume": 106,
+          "zone": "Norte",
+          "districtCve": "007"
+        },
+        {
+          "id": "p9",
+          "lat": 19.424,
+          "lng": -99.143,
+          "slug": "pothole",
+          "volume": 143,
+          "zone": "Centro",
+          "districtCve": "005"
+        },
+        {
+          "id": "p10",
+          "lat": 19.44,
+          "lng": -99.131,
+          "slug": "pothole",
+          "volume": 180,
+          "zone": "Norte",
+          "districtCve": "006"
+        },
+        {
+          "id": "p11",
+          "lat": 19.455999999999996,
+          "lng": -99.134,
+          "slug": "pothole",
+          "volume": 217,
+          "zone": "Centro",
+          "districtCve": "007"
+        },
+        {
+          "id": "p12",
+          "lat": 19.459999999999997,
+          "lng": -99.11,
+          "slug": "pothole",
+          "volume": 34,
+          "zone": "Norte",
+          "districtCve": "005"
+        },
+        {
+          "id": "p13",
+          "lat": 19.476,
+          "lng": -99.113,
+          "slug": "pothole",
+          "volume": 71,
+          "zone": "Centro",
+          "districtCve": "006"
+        }
+      ],
+      "k": null,
+      "result": [
+        {
+          "id": "cp-1",
+          "weight": 0,
+          "polygon": [
+            [
+              19.416,
+              -99.203
+            ],
+            [
+              19.4,
+              -99.2
+            ],
+            [
+              19.404,
+              -99.164
+            ],
+            [
+              19.436,
+              -99.194
+            ]
+          ],
+          "centroid": {
+            "lat": 19.4176,
+            "lng": -99.19040000000001
+          },
+          "count": 5
+        },
+        {
+          "id": "cp-2",
+          "weight": 0.041176470588235294,
+          "polygon": [
+            [
+              19.467999999999996,
+              -99.173
+            ],
+            [
+              19.451999999999998,
+              -99.17
+            ],
+            [
+              19.471999999999998,
+              -99.161
+            ]
+          ],
+          "centroid": {
+            "lat": 19.464,
+            "lng": -99.168
+          },
+          "count": 3
+        },
+        {
+          "id": "cp-3",
+          "weight": 1,
+          "polygon": [
+            [
+              19.424,
+              -99.143
+            ],
+            [
+              19.419999999999998,
+              -99.14
+            ],
+            [
+              19.459999999999997,
+              -99.11
+            ],
+            [
+              19.476,
+              -99.113
+            ],
+            [
+              19.455999999999996,
+              -99.134
+            ]
+          ],
+          "centroid": {
+            "lat": 19.445999999999994,
+            "lng": -99.12849999999999
+          },
+          "count": 6
+        }
+      ]
+    },
+    {
+      "name": "k5",
+      "points": [
+        {
+          "id": "p0",
+          "lat": 19.4,
+          "lng": -99.2,
+          "slug": "pothole",
+          "volume": 30,
+          "zone": "Norte",
+          "districtCve": "005"
+        },
+        {
+          "id": "p1",
+          "lat": 19.416,
+          "lng": -99.203,
+          "slug": "pothole",
+          "volume": 67,
+          "zone": "Centro",
+          "districtCve": "006"
+        },
+        {
+          "id": "p2",
+          "lat": 19.432,
+          "lng": -99.191,
+          "slug": "pothole",
+          "volume": 104,
+          "zone": "Norte",
+          "districtCve": "007"
+        },
+        {
+          "id": "p3",
+          "lat": 19.436,
+          "lng": -99.194,
+          "slug": "pothole",
+          "volume": 141,
+          "zone": "Centro",
+          "districtCve": "005"
+        },
+        {
+          "id": "p4",
+          "lat": 19.451999999999998,
+          "lng": -99.17,
+          "slug": "pothole",
+          "volume": 178,
+          "zone": "Norte",
+          "districtCve": "006"
+        },
+        {
+          "id": "p5",
+          "lat": 19.467999999999996,
+          "lng": -99.173,
+          "slug": "pothole",
+          "volume": 215,
+          "zone": "Centro",
+          "districtCve": "007"
+        },
+        {
+          "id": "p6",
+          "lat": 19.471999999999998,
+          "lng": -99.161,
+          "slug": "pothole",
+          "volume": 32,
+          "zone": "Norte",
+          "districtCve": "005"
+        },
+        {
+          "id": "p7",
+          "lat": 19.404,
+          "lng": -99.164,
+          "slug": "pothole",
+          "volume": 69,
+          "zone": "Centro",
+          "districtCve": "006"
+        },
+        {
+          "id": "p8",
+          "lat": 19.419999999999998,
+          "lng": -99.14,
+          "slug": "pothole",
+          "volume": 106,
+          "zone": "Norte",
+          "districtCve": "007"
+        },
+        {
+          "id": "p9",
+          "lat": 19.424,
+          "lng": -99.143,
+          "slug": "pothole",
+          "volume": 143,
+          "zone": "Centro",
+          "districtCve": "005"
+        },
+        {
+          "id": "p10",
+          "lat": 19.44,
+          "lng": -99.131,
+          "slug": "pothole",
+          "volume": 180,
+          "zone": "Norte",
+          "districtCve": "006"
+        },
+        {
+          "id": "p11",
+          "lat": 19.455999999999996,
+          "lng": -99.134,
+          "slug": "pothole",
+          "volume": 217,
+          "zone": "Centro",
+          "districtCve": "007"
+        },
+        {
+          "id": "p12",
+          "lat": 19.459999999999997,
+          "lng": -99.11,
+          "slug": "pothole",
+          "volume": 34,
+          "zone": "Norte",
+          "districtCve": "005"
+        },
+        {
+          "id": "p13",
+          "lat": 19.476,
+          "lng": -99.113,
+          "slug": "pothole",
+          "volume": 71,
+          "zone": "Centro",
+          "districtCve": "006"
+        }
+      ],
+      "k": 5,
+      "result": [
+        {
+          "id": "cp-1",
+          "weight": 0.6652360515021459,
+          "polygon": [
+            [
+              19.416,
+              -99.203
+            ],
+            [
+              19.4,
+              -99.2
+            ],
+            [
+              19.432,
+              -99.191
+            ],
+            [
+              19.436,
+              -99.194
+            ]
+          ],
+          "centroid": {
+            "lat": 19.421,
+            "lng": -99.19700000000002
+          },
+          "count": 4
+        },
+        {
+          "id": "cp-2",
+          "weight": 0.7746781115879828,
+          "polygon": [
+            [
+              19.451999999999998,
+              -99.17
+            ],
+            [
+              19.467999999999996,
+              -99.173
+            ]
+          ],
+          "centroid": {
+            "lat": 19.459999999999997,
+            "lng": -99.17150000000001
+          },
+          "count": 2
+        },
+        {
+          "id": "cp-3",
+          "weight": 0,
+          "polygon": [
+            [
+              19.471999999999998,
+              -99.161
+            ]
+          ],
+          "centroid": {
+            "lat": 19.471999999999998,
+            "lng": -99.161
+          },
+          "count": 1
+        },
+        {
+          "id": "cp-4",
+          "weight": 1,
+          "polygon": [
+            [
+              19.404,
+              -99.164
+            ],
+            [
+              19.419999999999998,
+              -99.14
+            ],
+            [
+              19.44,
+              -99.131
+            ]
+          ],
+          "centroid": {
+            "lat": 19.422,
+            "lng": -99.1445
+          },
+          "count": 4
+        },
+        {
+          "id": "cp-5",
+          "weight": 0.6223175965665236,
+          "polygon": [
+            [
+              19.455999999999996,
+              -99.134
+            ],
+            [
+              19.459999999999997,
+              -99.11
+            ],
+            [
+              19.476,
+              -99.113
+            ]
+          ],
+          "centroid": {
+            "lat": 19.464,
+            "lng": -99.11899999999999
+          },
+          "count": 3
+        }
+      ]
+    },
+    {
+      "name": "single",
+      "points": [
+        {
+          "id": "p0",
+          "lat": 19.4,
+          "lng": -99.2,
+          "slug": "pothole",
+          "volume": 30,
+          "zone": "Norte",
+          "districtCve": "005"
+        }
+      ],
+      "k": null,
+      "result": []
+    }
+  ]
+}

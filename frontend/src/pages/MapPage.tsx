@@ -7,18 +7,20 @@ import { HistoryPopover, type PlanHistoryItem } from "../components/HistoryPopov
 import { ObservationCard } from "../components/ObservationCard";
 import { useAuth } from "../lib/auth";
 import * as api from "../lib/api";
-import { runAnalysis } from "../lib/analysis";
+import { optimizePlan, parseDraft } from "../lib/citycrawlApi";
 import {
+  ACTIVE_ISSUE_TYPES,
   DEFAULT_BUDGET,
   DEFAULT_COSTS,
-  DEFAULT_SQUADS,
   BUDGET_MAX,
+  BUDGET_MIN,
 } from "../lib/types";
 import type {
   AnalysisPoint,
   AnalysisRequest,
   Observation,
   ObservationDetail,
+  PlanDraft,
   PlanResult,
   RegionOption,
   Roi,
@@ -97,7 +99,6 @@ export function MapPage() {
 
   // ---- layer toggles ------------------------------------------------------
   const [showPins, setShowPins] = useState(true);
-  const [showZones, setShowZones] = useState(true);
   const [showRois, setShowRois] = useState(true);
   const [activeTypes, setActiveTypes] = useState<Record<string, boolean>>({});
 
@@ -108,11 +109,23 @@ export function MapPage() {
   const [squadOverride, setSquadOverride] = useState<number | null>(null);
   const [costs, setCosts] = useState<Record<string, number>>({ ...DEFAULT_COSTS });
 
+  // ---- dock (the bottom config bar) collapse toggle -----------------------
+  const [dockOpen, setDockOpen] = useState(true);
+  const [dockHeight, setDockHeight] = useState(210);
+
+  // Keep a consistent gap between the layers panel and whatever sits bottom-left
+  // (the open dock, height-measured; or the 52px launcher when collapsed).
+  const LAUNCHER_H = 52;
+  const PANEL_GAP = 16;
+  const layersBottom = 18 + (dockOpen ? dockHeight : LAUNCHER_H) + PANEL_GAP;
+
   // ---- plan lifecycle -----------------------------------------------------
   const [previewing, setPreviewing] = useState(false);
   const [history, setHistory] = useState<PlanRun[]>([]);
   const [activeHistId, setActiveHistId] = useState<string | null>(null);
   const [histOpen, setHistOpen] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [planError, setPlanError] = useState<string | null>(null);
 
   // ---- selection ----------------------------------------------------------
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -122,6 +135,9 @@ export function MapPage() {
 
   const seq = useRef(1);
   const nextId = () => `plan-${seq.current++}`;
+  // Re-entry guard for plan generation — independent of any panel, so the dock's
+  // "Generar plan" button, the quick-action chips, and history replay can't overlap.
+  const generatingRef = useRef(false);
 
   // ---- initial load -------------------------------------------------------
   useEffect(() => {
@@ -179,13 +195,14 @@ export function MapPage() {
     [issueType, budget, regionFilter, squadOverride, costs, observations],
   );
 
-  // Live preview: while previewing, the plan is always in sync with the config.
+  // The plan is a SNAPSHOT captured when "Generar/Actualizar plan" is pressed
+  // (startPlan stores the result in history). It is NOT recomputed live as the config
+  // changes — changing budget/region/etc. only takes effect on the next Generate.
   const activePlan = useMemo<PlanResult | null>(
-    () => (previewing ? runAnalysis(request) : null),
-    [previewing, request],
+    () => (previewing ? history.find((h) => h.id === activeHistId)?.result ?? null : null),
+    [previewing, activeHistId, history],
   );
 
-  const squadTarget = squadOverride ?? DEFAULT_SQUADS;
   const pointCount = request.points.length;
 
   const historyItems = useMemo<PlanHistoryItem[]>(() => {
@@ -207,21 +224,32 @@ export function MapPage() {
   }, [history, liveRuns]);
 
   // ---- plan handlers ------------------------------------------------------
+  // The action plan is computed server-side by the Fly planning API (/v1/planning/optimize);
+  // the result is captured as a history snapshot. There is no client-side computation.
   const startPlan = useCallback(
-    (cfg: PlanConfig) => {
+    async (cfg: PlanConfig) => {
+      if (generatingRef.current) return;
+      generatingRef.current = true;
       setIssueType(cfg.issueType);
       setBudget(cfg.budget);
       setRegionFilter(cfg.regionFilter);
       setSquadOverride(cfg.squadOverride);
       const req = buildRequest(cfg, costs, observations);
       const id = nextId();
-      setHistory((h) => [
-        { id, createdAt: new Date().toISOString(), request: req, result: runAnalysis(req) },
-        ...h,
-      ]);
-      setActiveHistId(id);
-      setPreviewing(true);
+      setPlanError(null);
+      setGenerating(true);
       setHistOpen(false);
+      try {
+        const result = await optimizePlan(req);
+        setHistory((h) => [{ id, createdAt: new Date().toISOString(), request: req, result }, ...h]);
+        setActiveHistId(id);
+        setPreviewing(true);
+      } catch (e) {
+        setPlanError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setGenerating(false);
+        generatingRef.current = false;
+      }
     },
     [costs, observations],
   );
@@ -274,6 +302,27 @@ export function MapPage() {
   const locateSquad = (lat: number, lng: number) =>
     setPanTarget({ lat, lng, n: (panTarget?.n ?? 0) + 1 });
 
+  // Natural-language command — parse via the Fly LLM endpoint and POPULATE the dock for the
+  // user to review. It never starts optimization. Returns parser notes (warnings/unresolved
+  // terms) for the panel to surface, or null when the draft was applied cleanly.
+  const onSubmitPrompt = useCallback(
+    async (prompt: string): Promise<string | null> => {
+      const draft: PlanDraft = await parseDraft(prompt, types, regions);
+      if (draft.issueType && ACTIVE_ISSUE_TYPES.has(draft.issueType)) setIssueType(draft.issueType);
+      if (typeof draft.budget === "number" && draft.budget > 0)
+        setBudget(Math.min(BUDGET_MAX, Math.max(BUDGET_MIN, draft.budget)));
+      if (Array.isArray(draft.regionFilter)) {
+        const valid = new Set(regions.map((r) => r.cve));
+        setRegionFilter(draft.regionFilter.filter((c) => valid.has(c)));
+      }
+      if (typeof draft.squadCount === "number") setSquadOverride(draft.squadCount);
+      setDockOpen(true);
+      const notes = [...draft.unresolvedTerms, ...draft.warnings];
+      return notes.length ? notes.join(" · ") : null;
+    },
+    [types, regions],
+  );
+
   // ---- quick-action chips -------------------------------------------------
   const chips = [
     {
@@ -321,16 +370,13 @@ export function MapPage() {
         observations={observations}
         boundary={boundary}
         showPins={showPins}
-        showZones={showZones}
         showRois={showRois}
         activeTypes={activeTypes}
-        issueType={issueType}
-        squadTarget={squadTarget}
         plan={activePlan}
         rois={rois}
         selectedId={selectedId}
         accent={accent}
-        dockOpen
+        dockOpen={dockOpen}
         panTarget={panTarget}
         onSelect={onSelect}
       />
@@ -340,12 +386,11 @@ export function MapPage() {
         totalObs={observations.length}
         roiCount={rois.length}
         showPins={showPins}
-        showZones={showZones}
         showRois={showRois}
         activeTypes={activeTypes}
         lastSweepLabel={`${observations.length} obs · en vivo`}
+        bottom={layersBottom}
         onTogglePins={() => setShowPins((v) => !v)}
-        onToggleZones={() => setShowZones((v) => !v)}
         onToggleRois={() => setShowRois((v) => !v)}
         onToggleType={onToggleType}
         onSignOut={signOut}
@@ -356,6 +401,7 @@ export function MapPage() {
         plan={activePlan}
         typeLabels={typeLabels}
         chips={chips}
+        onSubmitPrompt={onSubmitPrompt}
         onClosePreview={closePreview}
         onLocateObs={onSelect}
         onLocateSquad={locateSquad}
@@ -372,7 +418,11 @@ export function MapPage() {
         typeLabels={typeLabels}
         pointCount={pointCount}
         previewing={previewing}
+        generating={generating}
+        planError={planError}
         hasHistory={historyItems.length > 0}
+        open={dockOpen}
+        onToggleOpen={() => setDockOpen((v) => !v)}
         onSetIssueType={setIssueType}
         onBudget={setBudget}
         onToggleRegion={onToggleRegion}
@@ -381,6 +431,7 @@ export function MapPage() {
         onAdjCost={onAdjCost}
         onGenerate={onGenerate}
         onToggleHistory={() => setHistOpen((v) => !v)}
+        onHeight={setDockHeight}
       />
 
       {histOpen && (

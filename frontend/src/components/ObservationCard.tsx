@@ -1,5 +1,5 @@
 import type { ObservationDetail } from "../lib/types";
-import { weightColor } from "../lib/geo";
+import { typeColor } from "../lib/types";
 
 interface Props {
   detail: ObservationDetail | null;
@@ -31,7 +31,7 @@ export function ObservationCard({ detail, loading, onClose }: Props) {
   }
 
   const d = detail;
-  const color = weightColor(d.weight);
+  const color = typeColor(d.slug);
   const pending = d.state === "pending";
   const fact = d.qty != null ? `${d.qty} ${d.unit ?? ""}`.trim() : "1 pza";
   const bbox = d.imageBbox;
@@ -75,12 +75,12 @@ export function ObservationCard({ detail, loading, onClose }: Props) {
 
         <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
           <div style={statBox}>
-            <div style={statLabel}>Prioridad</div>
-            <div style={{ ...statVal, color }}>{pending ? "pendiente" : `peso ${d.weight}`}</div>
+            <div style={statLabel}>Volumen</div>
+            <div style={{ ...statVal, color }}>{fact}</div>
           </div>
           <div style={statBox}>
-            <div style={statLabel}>Dato</div>
-            <div style={statVal}>{fact}</div>
+            <div style={statLabel}>Confianza</div>
+            <div style={statVal}>{d.conf != null ? `${Math.round(d.conf * 100)}%` : "—"}</div>
           </div>
         </div>
 
@@ -127,7 +127,6 @@ export function ObservationCard({ detail, loading, onClose }: Props) {
           <Chip>conf ×{d.confirmations}</Chip>
           <Chip>fallas {d.misses}</Chip>
           <Chip>{agoLabel(d.observedAt)}</Chip>
-          {d.conf != null && <Chip>{Math.round(d.conf * 100)}% conf.</Chip>}
         </div>
 
         <div style={{ marginTop: 9, borderTop: "1px solid #f3f5f8", paddingTop: 8, display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#5b6675" }}>
