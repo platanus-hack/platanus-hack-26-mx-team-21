@@ -63,7 +63,14 @@ frames ──gRPC──► Triton (TensorRT detector + Segformer floor-gate)   �
 **Cheap model on every frame, expensive model only on what matters.** Two runtimes = the two
 cost tiers, each served by the engine designed for it — all on our own hardware.
 
+It is also **redundancy by design**: the **fine-tuned YOLO26-seg** and the **VLM** are *two
+independent models* that must agree before we report a pothole, so no single model is a point
+of failure (detector false positive → VLM rejects; the VLM's full-scene pass also catches what
+a detector-only system would miss).
+
 ## One-line takeaways for the slide
+- *"Our fine-tuned YOLO26-seg + a VLM = redundant cross-check: two independent models must
+  agree, so no single point of failure."*
 - *"Right engine for each workload: vLLM (PagedAttention) for token decode, Triton (TensorRT)
   for fixed-shape vision — 17× and ~10 ms respectively, measured."*
 - *"gRPC seam decouples two torch stacks, lets each scale on its own axis (frame-rate vs

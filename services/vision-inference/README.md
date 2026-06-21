@@ -25,18 +25,22 @@ OpenAI-compatible). Nothing is sent to a third-party inference provider.
    (ms/frame), runs every frame in the offline `pipeline/`. A public **RDD2022 YOLOv12** model
    serves only as an external baseline we compared against — our YOLO26-seg is the one in the
    cascade. Training/test data and ground truth: see `docs/vision_model_and_ground_truth.md`.
-2. **VLM as validator (cascade).** The detector proposes; a **locally-served Qwen2.5-VL**
-   confirms each candidate (real pothole vs. shadow / manhole / patch). Segmentation +
-   VLM together = high precision **without training the VLM**.
+2. **VLM as a redundant cross-check (cascade).** The fine-tuned detector and the
+   **locally-served Qwen2.5-VL** are **two independent models** that must **agree** before we
+   report a pothole — explicit **redundancy / defense-in-depth**, not a single point of failure.
+   The detector proposes by learned shape; the VLM independently confirms each candidate (real
+   pothole vs. shadow / manhole / patch) and rejects false positives. A finding backed by
+   **both** is high-confidence. This redundancy buys high precision **without training the VLM**.
 3. **VLM for high-level analysis + RAG.** The same local Qwen2.5-VL describes the whole
    scene and enumerates *all* urban anomalies in natural language, grounded by **RAG from
    our context** — a fixed anomaly taxonomy + municipal criteria injected into the prompt
    today, with **pgvector retrieval** (taxonomy/normativa, visual few-shot) as the next step
    (see `docs/PLAN.md` §RAG).
 
-So: **fine-tuned segmentation detects → local VLM validates → local VLM does the high-level,
-RAG-grounded write-up.** The VLMs are served locally (vLLM) and used zero-shot with
-structured-output prompting; the *detectors* are the fine-tuned, task-specific models.
+So: **fine-tuned segmentation detects → local VLM cross-checks (redundancy) → local VLM does
+the high-level, RAG-grounded write-up.** The detector is **our fine-tuned, task-specific model**;
+the VLMs are served locally (vLLM), used zero-shot, and act as an **independent second model**
+so the system never relies on one model alone.
 
 Detection is by **shape/appearance over sequences** (events deduped over time), aligned
 with the system's capture→detect→prioritize flow.

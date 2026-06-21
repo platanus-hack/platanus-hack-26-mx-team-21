@@ -44,9 +44,10 @@ What to say when asked *"what is your vision model, what data, and what's your g
 > "Our model is a **YOLO26 segmentation** network we **fine-tuned on images we captured and
 > annotated by hand** — the **ground truth is our own polygon mask labels** of potholes. We
 > evaluate on a **separate, manually-captured held-out set** with the same hand annotations,
-> reporting **mask mAP / IoU / precision-recall**. In the live system the YOLO detection is
-> then **cross-validated by the VLM**, so a reported pothole has agreement from both the
-> fine-tuned detector and the language-vision model, and is georeferenced from the capture GPS."
+> reporting **mask mAP / IoU / precision-recall**. We deliberately run it **alongside the VLM
+> for redundancy**: in the live system the YOLO detection is **cross-validated by the VLM**, so a
+> reported pothole has agreement from **two independent models** — our fine-tuned detector and
+> the language-vision model — and is georeferenced from the capture GPS."
 
 ## Honest caveats (good to volunteer)
 - Hand-labeled set is **small** (hackathon scale) → we mitigate over-fit with the floor gate
