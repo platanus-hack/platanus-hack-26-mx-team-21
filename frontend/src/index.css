@@ -160,3 +160,13 @@ input[type="range"]::-moz-range-thumb {
     transform: translateY(14px);
   }
 }
+@keyframes obs-pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(0.6);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(2.4);
+    opacity: 0;
+  }
+}

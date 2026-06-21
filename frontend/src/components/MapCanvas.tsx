@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef } from "react";
 import L from "leaflet";
-import type { Observation, PlanResult, Roi, SweepRoute } from "../lib/types";
+import type { Observation, PlanResult, Roi } from "../lib/types";
 import { volumeColor } from "../lib/geo";
 import { riskLabel } from "../lib/analysis";
 
@@ -11,12 +11,15 @@ interface Props {
   showPins: boolean;
   showRois: boolean;
   activeTypes: Record<string, boolean>;
+  regionFilter: string[]; // included alcaldía cve_mun codes; empty = show all regions
   plan: PlanResult | null; // non-null while previewing a generated plan
   rois: Roi[];
-  sweepRoute: SweepRoute | null; // non-null while viewing a sweep's coverage ("recorrido")
+  highlightSweep: string | null; // when set, only this sweep's pins stay lit ("Ver recorrido")
   selectedId: string | null;
   accent: string;
   panTarget: { lat: number; lng: number; n: number } | null;
+  pulseIds: Set<string>;
+  fitTarget: { points: { lat: number; lng: number }[]; n: number } | null;
   onSelect: (id: string) => void;
 }
 
@@ -31,6 +34,7 @@ export const MapCanvas = memo(function MapCanvas(props: Props) {
   const groups = useRef<Record<string, L.LayerGroup>>({});
   const fitKeyRef = useRef<string>("");
   const sweepFitRef = useRef<string>("");
+  const regionFitRef = useRef<string>("");
   const onSelectRef = useRef(props.onSelect);
   onSelectRef.current = props.onSelect;
   const showRoisRef = useRef(props.showRois);
@@ -68,9 +72,9 @@ export const MapCanvas = memo(function MapCanvas(props: Props) {
       rois: L.layerGroup().addTo(map),
       roiLabels: L.layerGroup(), // added/removed by zoom, see syncRoiLabels
       pins: L.layerGroup().addTo(map),
+      pulse: L.layerGroup().addTo(map),
       photos: L.layerGroup().addTo(map), // citizen-report thumbnail markers (WhatsApp photos)
       plan: L.layerGroup().addTo(map),
-      sweep: L.layerGroup().addTo(map),
     };
     map.on("zoomend", syncRoiLabels);
     setTimeout(() => map.invalidateSize(false), 0);
@@ -151,14 +155,37 @@ export const MapCanvas = memo(function MapCanvas(props: Props) {
     if (!g || !r) return;
     g.clearLayers();
     if (!props.showPins) return;
+    // Region filter: when alcaldías are selected, only observations bound to one of them
+    // (by cve_mun) are drawn; empty filter shows every region. Unbound observations
+    // (districtCve == null) are hidden whenever any region is selected.
+    const regionSet = props.regionFilter.length ? new Set(props.regionFilter) : null;
+    const inRegion = (o: Observation) =>
+      !regionSet || (o.districtCve != null && regionSet.has(o.districtCve));
+    // Sweep highlight ("Ver recorrido"): when a sweep is active, pins NOT in it are
+    // faded to a faint grey so the sweep's continuous cluster stands out; its own pins
+    // keep their full volume color. No active sweep → everything renders normally.
+    const hl = props.highlightSweep;
+    const inSweep = (o: Observation) => !hl || o.sweep === hl;
     const vols = props.observations
-      .filter((o) => props.activeTypes[o.slug] && o.volume != null)
+      .filter((o) => props.activeTypes[o.slug] && o.volume != null && inRegion(o))
       .map((o) => o.volume as number);
     const maxVol = vols.length ? Math.max(...vols) : 1;
     for (const o of props.observations) {
       if (!props.activeTypes[o.slug]) continue;
+      if (!inRegion(o)) continue;
       if (props.thumbUrls[o.id]) continue; // shown as a photo marker instead of a dot
-      if (o.volume == null) {
+      const dim = hl != null && !inSweep(o);
+      if (dim) {
+        // not in the active sweep → faint grey wash, non-interactive so it can't steal clicks
+        L.circleMarker([o.lat, o.lng], {
+          renderer: r,
+          radius: PIN_RADIUS - 2,
+          stroke: false,
+          fillColor: "#9aa3b1",
+          fillOpacity: 0.18,
+          interactive: false,
+        }).addTo(g);
+      } else if (o.volume == null) {
         // pending / no volume → neutral dashed (same size as the rest)
         L.circleMarker([o.lat, o.lng], {
           renderer: r,
@@ -186,7 +213,54 @@ export const MapCanvas = memo(function MapCanvas(props: Props) {
           .addTo(g);
       }
     }
-  }, [props.observations, props.showPins, props.activeTypes, props.thumbUrls]);
+  }, [props.observations, props.showPins, props.activeTypes, props.thumbUrls, props.regionFilter, props.highlightSweep]);
+
+  // ---- transient pulse halos on freshly-arrived pins ----------------------
+  useEffect(() => {
+    const g = groups.current.pulse;
+    if (!g) return;
+    g.clearLayers();
+    if (props.pulseIds.size === 0) return;
+    for (const o of props.observations) {
+      if (!props.pulseIds.has(o.id)) continue;
+      L.marker([o.lat, o.lng], {
+        interactive: false,
+        icon: L.divIcon({
+          className: "",
+          html: `<div style="width:14px;height:14px;border-radius:50%;background:${props.accent};animation:obs-pulse 1.4s ease-out 2;"></div>`,
+          iconSize: [0, 0],
+        }),
+      }).addTo(g);
+    }
+  }, [props.pulseIds, props.observations, props.accent]);
+
+  // ---- fit to the selected region(s) -------------------------------------
+  // When the region filter changes to a non-empty selection, frame the bounding box of
+  // the in-region observations (panel-aware padding). Keyed on the sorted cve set so it
+  // fits once per distinct selection and never fights the user's manual pan/zoom.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const key = props.regionFilter.slice().sort().join(",");
+    if (key === regionFitRef.current) return;
+    regionFitRef.current = key;
+    if (!props.regionFilter.length) return;
+    const set = new Set(props.regionFilter);
+    const ll: [number, number][] = props.observations
+      .filter((o) => o.districtCve != null && set.has(o.districtCve))
+      .map((o) => [o.lat, o.lng]);
+    if (!ll.length) return;
+    try {
+      map.fitBounds(L.latLngBounds(ll).pad(0.08), {
+        maxZoom: 13,
+        animate: true,
+        paddingTopLeft: [80, 80],
+        paddingBottomRight: [404, 220],
+      });
+    } catch {
+      /* ignore */
+    }
+  }, [props.regionFilter, props.observations]);
 
   // ---- citizen-report photo markers (WhatsApp) ----------------------------
   // Observations carrying a thumbnail (today: WhatsApp citizen reports) render as their
@@ -197,8 +271,10 @@ export const MapCanvas = memo(function MapCanvas(props: Props) {
     if (!g) return;
     g.clearLayers();
     if (!props.showPins) return;
+    const regionSet = props.regionFilter.length ? new Set(props.regionFilter) : null;
     for (const o of props.observations) {
       if (!props.activeTypes[o.slug]) continue;
+      if (regionSet && (o.districtCve == null || !regionSet.has(o.districtCve))) continue;
       const url = props.thumbUrls[o.id];
       if (!url) continue;
       L.marker([o.lat, o.lng], {
@@ -211,7 +287,7 @@ export const MapCanvas = memo(function MapCanvas(props: Props) {
         .on("click", () => onSelectRef.current(o.id))
         .addTo(g);
     }
-  }, [props.observations, props.showPins, props.activeTypes, props.thumbUrls, props.accent]);
+  }, [props.observations, props.showPins, props.activeTypes, props.thumbUrls, props.accent, props.regionFilter]);
 
   // ---- plan preview overlay (crew clusters + ranked markers) --------------
   // Crews (cuadrillas) are a DISPATCH concept: each gets a categorical color so they
@@ -276,53 +352,22 @@ export const MapCanvas = memo(function MapCanvas(props: Props) {
     }
   }, [props.plan, props.accent]);
 
-  // ---- sweep coverage overlay ("Ver recorrido") --------------------------
-  // The covered footprint of one inspection sweep, drawn in the tenant accent so it
-  // reads as distinct from the red risk-ROIs and the categorical plan crews. Plus an
-  // accent ring on the originating observation. Nothing renders without a sweep.
-  useEffect(() => {
-    const g = groups.current.sweep;
-    if (!g) return;
-    g.clearLayers();
-    const sr = props.sweepRoute;
-    if (!sr) return;
-    try {
-      L.geoJSON({ type: "Feature", geometry: sr.coverage, properties: {} } as never, {
-        interactive: false,
-        style: {
-          color: props.accent,
-          weight: 2,
-          opacity: 0.9,
-          dashArray: "6 5",
-          fill: true,
-          fillColor: props.accent,
-          fillOpacity: 0.08,
-        },
-      }).addTo(g);
-    } catch {
-      /* ignore malformed geometry */
-    }
-    L.marker([sr.originLat, sr.originLng], {
-      interactive: false,
-      icon: L.divIcon({
-        className: "",
-        html: `<div style="width:18px;height:18px;border-radius:50%;border:3px solid ${props.accent};background:#fff;box-shadow:0 0 0 4px ${props.accent}33;transform:translate(-50%,-50%);"></div>`,
-        iconSize: [0, 0],
-      }),
-    }).addTo(g);
-  }, [props.sweepRoute, props.accent]);
-
-  // ---- fit to the sweep coverage (panel-aware padding) --------------------
+  // ---- fit to the highlighted sweep ("Ver recorrido") --------------------
+  // Frame the bounding box of the active sweep's observations (panel-aware padding),
+  // once per distinct sweep so it never fights the user's manual pan/zoom.
   useEffect(() => {
     const map = mapRef.current;
-    const sr = props.sweepRoute;
-    if (!map || !sr) return;
-    const key = `${sr.sweep}_${sr.originLat}_${sr.originLng}`;
-    if (key === sweepFitRef.current) return;
-    sweepFitRef.current = key;
+    const hl = props.highlightSweep;
+    if (!map) return;
+    if (hl === sweepFitRef.current) return;
+    sweepFitRef.current = hl ?? "";
+    if (!hl) return;
+    const ll: [number, number][] = props.observations
+      .filter((o) => o.sweep === hl)
+      .map((o) => [o.lat, o.lng]);
+    if (!ll.length) return;
     try {
-      const layer = L.geoJSON({ type: "Feature", geometry: sr.coverage, properties: {} } as never);
-      map.fitBounds(layer.getBounds(), {
+      map.fitBounds(L.latLngBounds(ll).pad(0.08), {
         maxZoom: 14,
         animate: true,
         paddingTopLeft: [80, 80],
@@ -331,7 +376,7 @@ export const MapCanvas = memo(function MapCanvas(props: Props) {
     } catch {
       /* ignore */
     }
-  }, [props.sweepRoute]);
+  }, [props.highlightSweep, props.observations]);
 
   // ---- fit to the plan (panel-aware padding) ------------------------------
   // NOTE: intentionally NOT keyed on dockOpen. Refitting fires a synchronous full-map
@@ -373,6 +418,26 @@ export const MapCanvas = memo(function MapCanvas(props: Props) {
     if (!map || !props.panTarget) return;
     map.flyTo([props.panTarget.lat, props.panTarget.lng], 14, { animate: true });
   }, [props.panTarget]);
+
+  // ---- fit to a batch of new observations ("Ver" on a batch toast) --------
+  const fitNRef = useRef(0);
+  useEffect(() => {
+    const map = mapRef.current;
+    const ft = props.fitTarget;
+    if (!map || !ft || ft.n === fitNRef.current || ft.points.length === 0) return;
+    fitNRef.current = ft.n;
+    const ll = ft.points.map((p) => [p.lat, p.lng]) as [number, number][];
+    try {
+      map.fitBounds(L.latLngBounds(ll).pad(0.2), {
+        maxZoom: 15,
+        animate: true,
+        paddingTopLeft: [80, 80],
+        paddingBottomRight: [320, 220],
+      });
+    } catch {
+      /* ignore */
+    }
+  }, [props.fitTarget]);
 
   return <div ref={elRef} className="absolute inset-0 z-0" />;
 });
