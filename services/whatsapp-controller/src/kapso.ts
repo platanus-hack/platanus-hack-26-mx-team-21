@@ -184,16 +184,14 @@ export class KapsoGateway {
    *
    * On each hop we re-derive the host policy from scratch:
    *   - https is required,
-   *   - the host must classify as "kapso" or "meta-cdn" (never "unknown"),
-   *   - the host must resolve to a public address,
+   *   - the host must resolve to a PUBLIC address (private/loopback/metadata are rejected),
    *   - X-API-Key (client.fetch) is sent ONLY when the *current* hop is a Kapso host;
    *     any other host (including a redirect target) is fetched via rawFetch (no auth).
    *
    * The legit Kapso flow goes: app.kapso.ai/rails/active_storage/.../redirect/... (kapso,
-   * auth) → 302 → blob storage. If that storage host is NOT allowlisted, we throw here so
-   * the caller falls back to client.media.download({mediaId,phoneNumberId}), which the SDK
-   * fetches with correct auth/host gating and its own redirect following. So the bytes are
-   * still retrieved whenever media.id is present — the URL path is purely an optimization.
+   * auth) → 302 → Kapso object storage (e.g. *.r2.cloudflarestorage.com). We follow that
+   * redirect WITHOUT auth (rawFetch) and with the SSRF public-IP check, so the fast URL path
+   * works for normal traffic; download-by-id remains the fallback only if the URL path fails.
    */
   private async fetchMediaUrl(
     media: InboundMedia,
@@ -237,19 +235,22 @@ export class KapsoGateway {
         if (next.protocol !== "https:") {
           throw new Error(`media fetch redirect to non-https scheme: ${next.protocol}`);
         }
+        // Follow the redirect. Kapso media URLs (app.kapso.ai/.../redirect/...) 302 to Kapso's
+        // own object storage (e.g. *.r2.cloudflarestorage.com), so the target is normally NOT a
+        // Kapso host — that's expected and must NOT block the download. We still follow it, but
+        // safely: a non-Kapso hop is fetched via rawFetch (NO X-API-Key — see the fetch above),
+        // and the SSRF guard (assertHostResolvesPublic at the top of the next hop) rejects any
+        // private/loopback/metadata target. So auth rides only on Kapso hops; bytes are fetched
+        // from the (public, IP-checked) storage target without leaking credentials.
         const nextPolicy = classifyHost(next.hostname);
-        if (nextPolicy === "unknown") {
-          // Redirect target not allowlisted: abandon the URL path. Caller falls back to id.
-          throw new Error(`media fetch redirect to non-allowlisted host: ${next.hostname}`);
-        }
         logger.debug("following media redirect", {
           status: res.status,
           to: next.host,
-          policy: nextPolicy,
+          auth: nextPolicy === "kapso",
         });
         currentUrl = next.toString();
         currentHost = next.hostname;
-        currentPolicy = nextPolicy;
+        currentPolicy = nextPolicy; // "unknown" -> next hop uses rawFetch (no auth)
         continue;
       }
 
