@@ -57,7 +57,7 @@ Explicitly out of scope:
                               │              ▲
  Per-instance Priority ───────┤              │
                               ▼              ▼
- Media Service ─────────▶ Application API ◀──────▶ Durable job queue
+ R2 Broker Worker ───────▶ Application API ◀──────▶ Durable job queue
                               ▲      │                         │
  INEGI source data ─────▶ Importer   ▼                         ▼
                               PostgreSQL/PostGIS      Provider adapter worker
@@ -90,7 +90,7 @@ uses one PostgreSQL cluster:
 |---|---|---|
 | Sweeps, observation types, observations | Vision/observation module | Read-only |
 | Priority runs and per-observation scores | Priority module | Read-only |
-| Media bytes and frame lookup | Media module | Reference/API only |
+| Media bytes and frame lookup | Cloudflare R2 + broker Worker (`app_authorize_object`) | Reference/API only — bytes served by broker, never owned by the application |
 | Cities, INEGI editions/areas/bindings | Application | Read/write |
 | Analysis definitions, runs, inputs, attempts, artifacts | Application | Read/write |
 | Costing and optimization configuration | Analysis provider | Descriptor/API only |
@@ -182,8 +182,9 @@ GET /cities/{city_id}/geo-areas?level=&parent_id=&query=&edition_id=
 Observation vector tiles contain only map fields: observation ID, type, location,
 priority state, and priority weight when present. The client can display instances,
 a weighted heat layer, or both. Full attributes and frame evidence references come from
-the detail endpoint. The media service resolves `recording_id` and `frame_ref`; media
-bytes never pass through map tiles.
+the detail endpoint. The broker Worker resolves `recording_id` and `frame_ref` to
+Cloudflare R2 objects, authorizing access via `public.app_authorize_object`; media
+bytes never pass through map tiles. Live storage contract: `supabase/STORAGE.md`.
 
 Tile cache keys include city, active observation data version, active priority run, INEGI
 edition where applicable, and tile coordinates.

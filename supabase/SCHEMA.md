@@ -1,6 +1,6 @@
 # Database Schema Reference (as-built)
 
-**Last verified:** 2026-06-20 against `supabase/migrations/0001`–`0011` + `0101`–`0103`.
+**Last verified:** 2026-06-20 against `supabase/migrations/0001`–`0011` + `0101`–`0103` + `0210`–`0211`.
 
 This document describes the **database as it is actually built by the committed
 migrations** — every schema, table, column, key constraint, index, function,
@@ -55,7 +55,9 @@ above the reserved core band so the two streams never collide.
 | `0011_read_model_cache.sql` | `vision.read_model_state` + `bump_data_version()`; `platform.tenant_visible_observations`, `tenant_tile_sets`; fns `rebuild_tenant_visible()`, `can_view_observation()` |
 | `0101_priority_external_signals.sql` | `priority.external_signals` |
 | `0102_priority_rois.sql` | `priority.roi_runs`, `rois`, view `current_rois` |
-| `0103_external_data_storage.sql` | private storage bucket `external-data` |
+| `0103_external_data_storage.sql` | private storage bucket `external-data` (Supabase Storage — **superseded by `0211`**) |
+| `0210_r2_access_api.sql` | `public.app_authorize_object(p_bucket, p_path)` — RPC gate for R2 access broker |
+| `0211_drop_supabase_storage.sql` | removes Supabase Storage bucket + RLS policies; object storage migrated to Cloudflare R2 |
 
 ## Conventions (apply to every table unless noted)
 
@@ -172,7 +174,7 @@ Manifest of geo-clipped vector tiles written to the `tenant-tiles` bucket. Keyed
 | `platform.active_tenant_id()` | uuid | reads per-request GUC `app.tenant_id` |
 | `platform.is_member(p_tenant uuid, p_min_role text = 'viewer')` | boolean | membership + role check; `analysis_author` implies `viewer` |
 | `platform.rebuild_tenant_visible(p_tenant uuid)` | int | full rebuild of the cached visible set against the active boundary; returns row count |
-| `platform.can_view_observation(p_observation_id uuid)` | boolean | membership + `ST_Contains(active boundary, location)`; guards signed-URL minting |
+| `platform.can_view_observation(p_observation_id uuid)` | boolean | membership + `ST_Contains(active boundary, location)`; called by `app_authorize_object` to gate R2 media access |
 | `platform.drain_outbox()` | void | moves pending outbox rows into `pgmq` queues (see [Async](#async-infrastructure)) |
 
 ---
@@ -648,25 +650,32 @@ One submitted analysis. Idempotency key unique within tenant; pins boundary vers
 
 **`pg_cron`** runs `select platform.drain_outbox();` on the job named `drain_outbox` every **10 seconds**.
 
-A long-running worker (service-role, not yet in this repo) is expected to consume the queues, run the provider adapter, rebuild the read-model cache, and produce thumbnails.
+A worker (not yet in this repo) is expected to consume the queues, run the provider adapter, rebuild the read-model cache, and produce thumbnails. The worker writes media/tiles to Cloudflare R2 over the S3 API (`STORAGE_BACKEND=r2`) and connects to Supabase Postgres for DB writes — no service-role key is used for storage.
 
 ## Storage buckets
+
+Object storage is on **Cloudflare R2** — not Supabase Storage. All four buckets are
+private R2 buckets declared as IaC in `services/broker/wrangler.toml`. There are no
+`storage.buckets` rows and no Supabase Storage RLS policies.
 
 Full reference (paths, lineage, access control, agent/engineer guidance):
 [**`STORAGE.md`**](./STORAGE.md). Summary:
 
-| Bucket | Created? | Holds | Path root | Referenced by |
+| Bucket | Provider | Holds | Path root | Referenced by |
 |---|---|---|---|---|
-| `external-data` | **Yes** (`0103`) | raw + staging external-data objects | `raw/…`, `staging/…` | `priority.external_signals.source_object_ref`, `priority.rois.source_object_refs` |
-| `sweep-video` | **No** — column default only | per-sweep recordings | `sweeps/{sweep_id}/…` | `vision.recordings` |
-| `observation-thumbnails` | **No** — column default only | per-observation previews | `observations/{observation_id}/…` | `vision.observation_thumbnails` |
-| `tenant-tiles` | **No** — column default only | precomputed geo-clipped tiles | `{tenant_id}/{boundary_version_id}/{data_version}/…` | `platform.tenant_tile_sets` |
+| `external-data` | Cloudflare R2 | raw + staging external-data objects | `raw/…`, `staging/…` | `priority.external_signals.source_object_ref`, `priority.rois.source_object_refs` |
+| `sweep-video` | Cloudflare R2 | per-sweep recordings | `sweeps/{sweep_id}/…` | `vision.recordings` |
+| `observation-thumbnails` | Cloudflare R2 | per-observation previews | `observations/{observation_id}/…` | `vision.observation_thumbnails` |
+| `tenant-tiles` | Cloudflare R2 | precomputed geo-clipped tiles | `{tenant_id}/{boundary_version_id}/{data_version}/…` | `platform.tenant_tile_sets` |
 
-All buckets are **private**. A bucket's `file_size_limit` cannot exceed the project's
-**global** Storage limit (50 MB by default); raising it for video is a one-time config
-step (physical design §13.4) and is still pending. See `STORAGE.md` for the access-control
-model (geographic guard + service-role signed URLs for video/thumbnails; path-prefix RLS
-for tiles; S3 keys for external-data).
+**Access model:** protected media and tiles are served by the Python Cloudflare Worker
+broker at `https://r2-access-broker.alamst.workers.dev`. Clients call
+`GET /api/r2/object?bucket=&path=` with their Supabase JWT; the broker calls
+`public.app_authorize_object(p_bucket, p_path)` (which reuses `platform.is_member` /
+`platform.can_view_observation`) and, on allow, streams bytes from R2 via an R2 binding
+(Range → 206). There are no Supabase signed URLs and no service-role key for storage.
+External-data pipeline and vision/tile workers write to R2 over the S3 API. See
+`STORAGE.md` for full path templates and access-control rules.
 
 ## Invariants enforced in-database today
 
@@ -689,8 +698,7 @@ migration** — track them as the remaining data-model work:
 | **RLS policies** — no `enable row level security`, no `create policy` anywhere | §9 | Tables are not row-secured; access control relies on service-role-only writes by convention |
 | **Immutability triggers** — `enforce_observation_immutability`, append-only `audit_events`/frozen `run_*` | §11 | Set-once / immutable columns are documented but not trigger-enforced |
 | **`revoke`/`grant`** hardening on factual tables | §11.1 | Not applied |
-| **`sweep-video`, `observation-thumbnails`, `tenant-tiles` buckets** | §8 | Only referenced as column defaults; rows not inserted |
-| **Global Storage size raise** (>50 MB) for video | §13.4 | Large `sweep-video` uploads would fail |
+| **`sweep-video`, `observation-thumbnails`, `tenant-tiles` R2 buckets** | §8 | Declared in `services/broker/wrangler.toml`; DB pointer columns reference them but no seed rows exist yet |
 | **Incremental cache maintenance** (worker adds/removes single rows on outbox events) | §5.2 | Only full `rebuild_tenant_visible()` exists |
 | **`seed.sql`** (type catalog, dev tenant, INEGI fixture, active boundary) | §13.5 | `supabase db reset` produces an empty schema |
 | **Generated TS types** (`packages/db-types`) | §13.1 | Not generated |
