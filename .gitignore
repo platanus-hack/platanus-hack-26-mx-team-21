@@ -226,3 +226,6 @@ __marimo__/
 .dev.vars
 .wrangler/
 .superpowers/
+
+# local object-storage backend (services/api LOCAL_ROOT)
+.data/

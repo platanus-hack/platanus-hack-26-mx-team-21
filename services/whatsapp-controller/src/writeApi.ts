@@ -79,6 +79,10 @@ export class HttpWriteApi implements WriteApi {
     if (config.writeApi.token) headers["X-Operator-Key"] = config.writeApi.token;
 
     // Bound the outbound call so a slow/hanging write API doesn't tie up processing.
+    // NOTE: if WRITE_API_TIMEOUT_MS is shorter than a realistic worst-case write, the call
+    // may abort after the API has already committed; retries are SAFE because the API
+    // dedupes on kapso_message_id (idempotency key), so a re-submit returns the existing
+    // observation rather than creating a duplicate.
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), config.writeApi.timeoutMs);
     let text: string;

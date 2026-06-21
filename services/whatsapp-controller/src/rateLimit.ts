@@ -67,24 +67,54 @@ export class FixedWindowRateLimiter {
 }
 
 /**
- * Best-effort client IP behind Fly's proxy. Express's `req.ip` is unreliable without
- * trust-proxy, so we read the proxy headers directly:
- *   Fly-Client-IP > first X-Forwarded-For entry > socket remote address.
+ * Rate-limit key for the requester.
+ *
+ * We do NOT trust attacker-settable forwarding headers for keying: a client can set
+ * `X-Forwarded-For` (and even `Fly-Client-IP`) to any value to get a fresh bucket per
+ * request and defeat the limiter. We therefore key on the SOCKET peer address.
+ *
+ * On Fly, all inbound traffic arrives through Fly's edge proxy, so the socket peer is the
+ * proxy and `Fly-Client-IP` carries the real client IP. We only trust `Fly-Client-IP`
+ * when the peer is a private/loopback address (i.e. a same-host/intra-Fly hop, which is
+ * where the proxy sits) — never when the peer is a public address, since a public peer is
+ * a direct connection whose headers are fully attacker-controlled.
+ *
+ * `X-Forwarded-For` is never trusted for keying.
  */
 export function clientIp(req: {
+  ip?: string;
   headers: Record<string, string | string[] | undefined>;
   socket?: { remoteAddress?: string };
 }): string {
-  const fly = headerValue(req.headers["fly-client-ip"]);
-  if (fly) return fly;
+  const peer = req.socket?.remoteAddress;
 
-  const xff = headerValue(req.headers["x-forwarded-for"]);
-  if (xff) {
-    const first = xff.split(",")[0]?.trim();
-    if (first) return first;
+  // Trust Fly-Client-IP only when the connection came through a trusted (private) hop.
+  if (peer && isPrivatePeer(peer)) {
+    const fly = headerValue(req.headers["fly-client-ip"]);
+    if (fly) return fly;
   }
 
-  return req.socket?.remoteAddress ?? "unknown";
+  // Express's req.ip (with trust proxy enabled) or the raw socket peer otherwise.
+  return peer ?? req.ip ?? "unknown";
+}
+
+/** Cheap private/loopback check for the socket peer (proxy hops are private). */
+function isPrivatePeer(addr: string): boolean {
+  const a = addr.toLowerCase().replace(/^::ffff:/, "");
+  if (a === "::1" || a === "127.0.0.1" || a.startsWith("127.")) return true;
+  if (a.startsWith("10.")) return true;
+  if (a.startsWith("192.168.")) return true;
+  if (a.startsWith("169.254.")) return true; // link-local
+  const m = a.match(/^172\.(\d+)\./);
+  if (m) {
+    const second = Number(m[1]);
+    if (second >= 16 && second <= 31) return true;
+  }
+  if (a.startsWith("fc") || a.startsWith("fd")) return true; // fc00::/7 unique-local
+  if (a.startsWith("fe8") || a.startsWith("fe9") || a.startsWith("fea") || a.startsWith("feb")) {
+    return true; // fe80::/10 link-local
+  }
+  return false;
 }
 
 function headerValue(v: string | string[] | undefined): string | undefined {

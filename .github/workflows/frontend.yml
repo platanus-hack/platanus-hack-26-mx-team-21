@@ -1,5 +1,8 @@
 name: frontend
 
+permissions:
+  contents: read
+
 on:
   pull_request:
     paths: ["frontend/**", ".github/workflows/frontend.yml"]

@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { logger } from "./logger";
 
 function bool(v: string | undefined, def: boolean): boolean {
   if (v === undefined || v === "") return def;
@@ -25,6 +26,8 @@ export interface Config {
     signatureHeader: string;
     signatureRequired: boolean;
     rateLimitPerMin: number;
+    /** App-wide flood ceiling (sum across all clients), independent of per-client keying. */
+    globalRateLimitPerMin: number;
   };
   writeApi: {
     mode: WriteApiMode;
@@ -56,6 +59,7 @@ export const config: Config = {
     signatureHeader: (process.env.KAPSO_SIGNATURE_HEADER ?? "x-webhook-signature").toLowerCase(),
     signatureRequired: bool(process.env.KAPSO_SIGNATURE_REQUIRED, false),
     rateLimitPerMin: int(process.env.WEBHOOK_RATE_LIMIT_PER_MIN, 120),
+    globalRateLimitPerMin: int(process.env.WEBHOOK_GLOBAL_RATE_LIMIT_PER_MIN, 2_000),
   },
   writeApi: {
     mode: (process.env.WRITE_API_MODE as WriteApiMode) === "http" ? "http" : "dry-run",
@@ -85,8 +89,21 @@ export function validateConfig(): string[] {
   if (config.webhook.signatureRequired && !config.webhook.secret) {
     problems.push("KAPSO_WEBHOOK_SECRET is required when KAPSO_SIGNATURE_REQUIRED=true");
   }
+  // Running the real write path while accepting unauthenticated webhooks means any caller
+  // who can reach the endpoint can forge observations. Make this LOUD (error level) rather
+  // than a quiet warning — we don't refuse to start, but it must not pass unnoticed.
+  if (config.writeApi.mode === "http" && !config.webhook.signatureRequired) {
+    logger.error(
+      "SECURITY: WRITE_API_MODE=http but KAPSO_SIGNATURE_REQUIRED is not enabled — " +
+        "webhooks are unauthenticated and observations can be forged. " +
+        "Set KAPSO_SIGNATURE_REQUIRED=true (with KAPSO_WEBHOOK_SECRET) before production use.",
+    );
+  }
   if (config.webhook.rateLimitPerMin <= 0) {
     problems.push("WEBHOOK_RATE_LIMIT_PER_MIN must be a positive integer");
+  }
+  if (config.webhook.globalRateLimitPerMin <= 0) {
+    problems.push("WEBHOOK_GLOBAL_RATE_LIMIT_PER_MIN must be a positive integer");
   }
   if (config.media.maxBytes <= 0) problems.push("MAX_MEDIA_BYTES must be a positive integer");
   if (config.media.fetchTimeoutMs <= 0) problems.push("MEDIA_FETCH_TIMEOUT_MS must be a positive integer");

@@ -1,5 +1,8 @@
 name: supabase
 
+permissions:
+  contents: read
+
 on:
   pull_request:
     paths: ["supabase/**", ".github/workflows/supabase.yml"]

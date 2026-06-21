@@ -22,6 +22,21 @@ const CARTO_LIGHT = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.
 const PIN_RADIUS = 6; // fixed — pins encode volume by COLOR only, never by size
 const ROI_LABEL_ZOOM = 13; // risk-zone labels only appear once zoomed in this far
 
+// ---- divIcon trust boundary --------------------------------------------------
+// divIcon `html` is assigned via innerHTML, so any value interpolated into it must
+// be sanitized at the boundary — TS types are compile-time only and the planning
+// API's `color` is a free-form string. `safeColor` accepts only a strict hex color
+// (else a safe fallback); `n` coerces to a finite number (else a safe fallback).
+const HEX_COLOR = /^#[0-9a-fA-F]{3,8}$/;
+const FALLBACK_COLOR = "#2f64e6"; // matches SQUAD_COLORS[0]
+function safeColor(value: unknown, fallback = FALLBACK_COLOR): string {
+  return typeof value === "string" && HEX_COLOR.test(value) ? value : fallback;
+}
+function n(value: unknown, fallback = 0): number {
+  const v = Number(value);
+  return Number.isFinite(v) ? v : fallback;
+}
+
 export const MapCanvas = memo(function MapCanvas(props: Props) {
   const elRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -216,7 +231,7 @@ export const MapCanvas = memo(function MapCanvas(props: Props) {
         interactive: false,
         icon: L.divIcon({
           className: "",
-          html: `<div style="background:${sq.color};color:#fff;font:700 9px IBM Plex Mono,monospace;padding:2px 7px;border-radius:7px;white-space:nowrap;box-shadow:0 3px 9px -3px rgba(20,30,50,.4);transform:translate(-50%,-50%);">C${sq.idx} · ${sq.count}</div>`,
+          html: `<div style="background:${safeColor(sq.color)};color:#fff;font:700 9px IBM Plex Mono,monospace;padding:2px 7px;border-radius:7px;white-space:nowrap;box-shadow:0 3px 9px -3px rgba(20,30,50,.4);transform:translate(-50%,-50%);">C${n(sq.idx)} · ${n(sq.count)}</div>`,
           iconSize: [0, 0],
         }),
       }).addTo(g);
@@ -238,7 +253,7 @@ export const MapCanvas = memo(function MapCanvas(props: Props) {
         interactive: false,
         icon: L.divIcon({
           className: "",
-          html: `<div style="color:#fff;font:700 10px IBM Plex Mono,monospace;transform:translate(-50%,-50%);">${tc.rank}</div>`,
+          html: `<div style="color:#fff;font:700 10px IBM Plex Mono,monospace;transform:translate(-50%,-50%);">${n(tc.rank)}</div>`,
           iconSize: [0, 0],
         }),
       }).addTo(g);

@@ -71,3 +71,39 @@ def test_terminal_failure_on_extract(tmp_path, monkeypatch):
     assert err["stage"] == "extract"
     assert err["error"]["code"] == "dataset_extract_failed"
     assert err["error"]["requestId"] == "rid-1"
+
+
+def test_error_message_does_not_leak_exception_detail(tmp_path, monkeypatch):
+    # #7: the post-stream NDJSON error must NOT serialize str(exc) (could leak DSN/host/path).
+    # It must be a static per-stage message; the detail goes to the server logger instead.
+    secret = "postgresql://user:pw@internal-host:5432/db SECRET-DETAIL"
+
+    def boom(s, ctx):
+        raise RuntimeError(secret)
+
+    monkeypatch.setattr(ckan_csv, "extract", boom)
+    svc = DatasetRefreshService(_settings(tmp_path))
+    records = list(svc.run(source_ids=[SOURCE], request_id="rid-2"))
+    err = records[-1]
+    assert err["error"]["message"] == "extract failed"
+    assert secret not in err["error"]["message"]
+    assert "SECRET-DETAIL" not in str(err)
+
+
+def test_init_failure_message_is_static(tmp_path, monkeypatch):
+    # The pre-stream init failure path also uses the static message (no str(exc) leak).
+    import citycrawl_api.modules.datasets.service as svc_mod
+
+    def boom_store(settings):
+        raise RuntimeError("internal-dsn LEAK-XYZ")
+
+    monkeypatch.setattr(
+        "citycrawl_api.modules.datasets.core.storage.make_store", boom_store
+    )
+    svc = DatasetRefreshService(_settings(tmp_path))
+    records = list(svc.run(source_ids=[SOURCE], request_id="rid-3"))
+    err = records[-1]
+    assert err["type"] == "error"
+    assert err["stage"] == "init"
+    assert err["error"]["message"] == "init failed"
+    assert "LEAK-XYZ" not in str(err)

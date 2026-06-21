@@ -20,7 +20,8 @@ primary_region = "dfw"
   WRITE_API_BASE_URL = "https://citycrawl-api.fly.dev"
   DEFAULT_OBSERVATION_TYPE = "pothole"
   KAPSO_SIGNATURE_HEADER = "x-webhook-signature"
-  KAPSO_SIGNATURE_REQUIRED = "false"
+  # Fail-closed on webhook signatures. KAPSO_WEBHOOK_SECRET is supplied via `fly secrets set`.
+  KAPSO_SIGNATURE_REQUIRED = "true"
   SESSION_TTL_MINUTES = "15"
 
 [http_service]

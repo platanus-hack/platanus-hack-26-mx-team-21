@@ -13,6 +13,9 @@ export interface DownloadedImage {
 
 type HostPolicy = "kapso" | "meta-cdn" | "unknown";
 
+/** Max number of redirects we will chase before giving up on a media URL. */
+const MAX_REDIRECTS = 3;
+
 /**
  * Classify a media host against the allowlist.
  *   - "kapso":   send Kapso auth (these are our own hosts).
@@ -62,7 +65,20 @@ function isPrivateIp(addr: string): boolean {
   return true; // not a recognizable IP -> unsafe
 }
 
-/** Reject if the hostname resolves to (or contains) any private/loopback address. */
+/**
+ * Reject if the hostname resolves to (or contains) any private/loopback address.
+ *
+ * NOTE on DNS rebinding (TOCTOU): this resolves the host, but the subsequent fetch
+ * resolves it again independently, so a hostile resolver could in theory return a
+ * public address here and a private one to fetch. We do NOT pin the validated IP:
+ * the global `fetch`/undici stack used by the SDK and here does not expose a clean,
+ * dependency-free way to connect to a fixed IP while preserving Host/SNI, and adding
+ * undici as a direct dependency for a custom dispatcher is not worth it here. The
+ * PRIMARY control against SSRF is the strict host allowlist (classifyHost) — only
+ * Kapso/Meta hosts are ever fetched, and #1's redirect:"manual" re-validation closes
+ * the redirect-chase hole. This resolve check is best-effort defense in depth, not a
+ * standalone guarantee.
+ */
 async function assertHostResolvesPublic(host: string): Promise<void> {
   let records: { address: string }[];
   try {
@@ -111,7 +127,11 @@ export class KapsoGateway {
    *  2. Allowlist the host: Kapso hosts are fetched WITH auth, Meta CDN hosts WITHOUT auth,
    *     and unknown hosts are never fetched (we fall back to download-by-id instead).
    *  3. Resolve the host and reject private/loopback/metadata addresses (SSRF defense in depth).
-   *  4. Enforce a timeout and a maximum download size.
+   *  4. Enforce a timeout and a maximum download size on every hop.
+   *  5. Follow redirects MANUALLY: re-run the full validation on each redirect target and
+   *     never carry the Kapso X-API-Key onto a non-Kapso host. (The real Kapso media URL is
+   *     an app.kapso.ai/rails/active_storage/.../redirect/... link that 302s to blob storage
+   *     in normal operation, so redirects are expected — see fetchMediaUrl.)
    */
   async downloadImage(media: InboundMedia): Promise<DownloadedImage> {
     if (!media.url && !media.id) throw new Error("inbound message has no media url or id");
@@ -158,22 +178,81 @@ export class KapsoGateway {
     return this.downloadById(media);
   }
 
-  /** Fetch an allowlisted https media URL with SSRF, timeout and size protections. */
+  /**
+   * Fetch an allowlisted https media URL with SSRF, timeout and size protections,
+   * following redirects MANUALLY so we can re-validate every target.
+   *
+   * On each hop we re-derive the host policy from scratch:
+   *   - https is required,
+   *   - the host must classify as "kapso" or "meta-cdn" (never "unknown"),
+   *   - the host must resolve to a public address,
+   *   - X-API-Key (client.fetch) is sent ONLY when the *current* hop is a Kapso host;
+   *     any other host (including a redirect target) is fetched via rawFetch (no auth).
+   *
+   * The legit Kapso flow goes: app.kapso.ai/rails/active_storage/.../redirect/... (kapso,
+   * auth) → 302 → blob storage. If that storage host is NOT allowlisted, we throw here so
+   * the caller falls back to client.media.download({mediaId,phoneNumberId}), which the SDK
+   * fetches with correct auth/host gating and its own redirect following. So the bytes are
+   * still retrieved whenever media.id is present — the URL path is purely an optimization.
+   */
   private async fetchMediaUrl(
     media: InboundMedia,
     host: string,
     policy: HostPolicy,
   ): Promise<DownloadedImage> {
-    await assertHostResolvesPublic(host);
+    let currentUrl = media.url!;
+    let currentHost = host;
+    let currentPolicy = policy;
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), config.media.fetchTimeoutMs);
-    try {
-      const init = { signal: controller.signal };
-      const res =
-        policy === "kapso"
-          ? await this.client.fetch(media.url!, init)
-          : await this.client.rawFetch(media.url!, init);
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+      await assertHostResolvesPublic(currentHost);
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), config.media.fetchTimeoutMs);
+      let res: Response;
+      try {
+        // redirect:"manual" — do NOT let undici chase 3xx automatically; we re-validate
+        // each target ourselves and pick the right auth mode per hop.
+        const init = { signal: controller.signal, redirect: "manual" as const };
+        res =
+          currentPolicy === "kapso"
+            ? await this.client.fetch(currentUrl, init)
+            : await this.client.rawFetch(currentUrl, init);
+      } finally {
+        clearTimeout(timer);
+      }
+
+      // Handle redirects ourselves: validate the Location target before following it.
+      if (res.status >= 300 && res.status < 400) {
+        const location = res.headers.get("location");
+        if (!location) throw new Error(`media fetch redirect (${res.status}) without Location`);
+        if (hop >= MAX_REDIRECTS) throw new Error("media fetch exceeded redirect limit");
+
+        let next: URL;
+        try {
+          next = new URL(location, currentUrl); // resolve relative redirects
+        } catch (err) {
+          throw new Error(`media fetch redirect to invalid URL: ${String(err)}`);
+        }
+        if (next.protocol !== "https:") {
+          throw new Error(`media fetch redirect to non-https scheme: ${next.protocol}`);
+        }
+        const nextPolicy = classifyHost(next.hostname);
+        if (nextPolicy === "unknown") {
+          // Redirect target not allowlisted: abandon the URL path. Caller falls back to id.
+          throw new Error(`media fetch redirect to non-allowlisted host: ${next.hostname}`);
+        }
+        logger.debug("following media redirect", {
+          status: res.status,
+          to: next.host,
+          policy: nextPolicy,
+        });
+        currentUrl = next.toString();
+        currentHost = next.hostname;
+        currentPolicy = nextPolicy;
+        continue;
+      }
+
       if (!res.ok) throw new Error(`media fetch failed: ${res.status}`);
 
       const declared = Number(res.headers.get("content-length"));
@@ -188,9 +267,10 @@ export class KapsoGateway {
 
       const contentType = media.contentType ?? res.headers.get("content-type") ?? "image/jpeg";
       return { bytes, contentType, filename: media.filename ?? defaultName(contentType) };
-    } finally {
-      clearTimeout(timer);
     }
+
+    // Unreachable: the loop either returns bytes or throws on every path.
+    throw new Error("media fetch exceeded redirect limit");
   }
 
   /** Resolve media bytes via the SDK's download-by-id (auth + short-lived URL handled by the SDK). */

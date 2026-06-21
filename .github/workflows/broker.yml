@@ -1,5 +1,8 @@
 name: broker
 
+permissions:
+  contents: read
+
 on:
   pull_request:
     paths: ["services/broker/**", ".github/workflows/broker.yml"]

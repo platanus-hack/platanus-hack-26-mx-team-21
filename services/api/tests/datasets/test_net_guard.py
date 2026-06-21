@@ -63,3 +63,50 @@ def test_metadata_ip_rejected_even_if_allowlisted(monkeypatch):
 ])
 def test_ip_classification(ip, public):
     assert net._is_public_ip(ip) is public
+
+
+# --- #5: IP pinning (DNS-rebinding TOCTOU) ---------------------------------------------
+
+
+def test_assert_safe_url_returns_validated_public_ips(monkeypatch):
+    # The validated IPs are returned so safe_get can PIN the connection to them.
+    monkeypatch.setattr(net, "_resolves_to_public", lambda h: True)
+    monkeypatch.setattr(net, "_resolve_public_addrs", lambda h: ["203.0.113.5"])
+    addrs = assert_safe_url("https://anything.gob.mx/x", _settings())
+    assert addrs == ["203.0.113.5"]
+
+
+def test_resolve_public_addrs_raises_on_private(monkeypatch):
+    # If any resolved address is non-public, resolution raises (no silent pin to internal).
+    monkeypatch.setattr(
+        net.socket, "getaddrinfo",
+        lambda host, port: [(None, None, None, None, ("10.0.0.1", 0))],
+    )
+    with pytest.raises(OutboundFetchError):
+        net._resolve_public_addrs("internal.gob.mx")
+
+
+def test_pinned_request_args_connects_by_ip_keeps_host_and_sni():
+    url, headers, ext = net._pinned_request_args(
+        "https://datos.cdmx.gob.mx/path?q=1", ["203.0.113.5"], {"Accept": "*/*"}
+    )
+    assert "203.0.113.5" in url
+    assert "datos.cdmx.gob.mx" not in url  # connect target is the pinned IP, not the name
+    assert headers["Host"] == "datos.cdmx.gob.mx"   # virtual-host routing preserved
+    assert headers["Accept"] == "*/*"               # caller headers preserved
+    assert ext == {"sni_hostname": "datos.cdmx.gob.mx"}  # TLS cert validated vs real name
+
+
+def test_pinned_request_args_brackets_ipv6():
+    url, headers, ext = net._pinned_request_args(
+        "https://example.gob.mx/x", ["2606:4700:4700::1111"], None
+    )
+    assert "[2606:4700:4700::1111]" in url
+
+
+def test_pinned_request_args_no_addrs_is_passthrough():
+    # Empty addrs (e.g. resolver monkeypatched) -> by-name connect, no extensions.
+    url, headers, ext = net._pinned_request_args("https://x.gob.mx/y", [], {"A": "b"})
+    assert url == "https://x.gob.mx/y"
+    assert headers == {"A": "b"}
+    assert ext is None

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import express from "express";
 import { config, validateConfig } from "./config";
 import { logger } from "./logger";
@@ -10,8 +11,16 @@ const problems = validateConfig();
 if (problems.length) logger.warn("config issues (continuing)", { problems });
 
 const app = express();
+// Behind Fly's edge proxy: let Express populate req.ip from the proxy chain. We still do
+// our own spoof-resistant keying in clientIp() (socket peer + trusted Fly-Client-IP only).
+app.set("trust proxy", true);
 const engine = new ConversationEngine(new KapsoGateway());
+// Per-client limiter: spoof-resistant key (see clientIp).
 const webhookLimiter = new FixedWindowRateLimiter(config.webhook.rateLimitPerMin);
+// Global flood ceiling: a single fixed bucket NOT keyed by the (spoofable) client IP, so a
+// header-rotating flood that dodges the per-client limiter still hits an absolute cap.
+// Sized generously vs. the per-client limit so it never throttles normal multi-user load.
+const globalLimiter = new FixedWindowRateLimiter(config.webhook.globalRateLimitPerMin, 60_000, 1);
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true, mode: config.writeApi.mode });
@@ -30,7 +39,15 @@ app.get("/webhook", (req, res) => {
 });
 
 app.post("/webhook", express.raw({ type: "*/*", limit: "10mb" }), (req, res) => {
-  // (a) Per-IP rate limit first — reject floods cheaply before any parsing/crypto.
+  // (a) Rate limit first — reject floods cheaply before any parsing/crypto.
+  // Global flood ceiling (not keyed by the spoofable IP) catches header-rotating floods.
+  const gl = globalLimiter.hit("global");
+  if (!gl.allowed) {
+    logger.warn("webhook globally rate limited", { limit: gl.limit });
+    res.sendStatus(429);
+    return;
+  }
+  // Per-client limit (spoof-resistant key) for normal abuse.
   const ip = clientIp(req);
   const rl = webhookLimiter.hit(ip);
   if (!rl.allowed) {
@@ -79,8 +96,18 @@ app.post("/webhook", express.raw({ type: "*/*", limit: "10mb" }), (req, res) => 
   const messages = parseInbound(payload);
   logger.info("webhook received", { count: messages.length });
   if (messages.length === 0) {
-    // Nothing recognized — surface the raw shape so we can adjust the parser.
-    logger.warn("no inbound messages parsed", { body: raw.toString("utf8").slice(0, 1000) });
+    // Nothing recognized. Do NOT log the raw attacker-controlled body (PII + log-volume
+    // abuse, and it bypasses redactPhone/redactUrl). Log only the structural shape:
+    // top-level key names, body byte length, and a short sha256 prefix for correlation.
+    const topLevelKeys =
+      payload && typeof payload === "object" && !Array.isArray(payload)
+        ? Object.keys(payload as Record<string, unknown>)
+        : [];
+    logger.warn("no inbound messages parsed", {
+      topLevelKeys,
+      bytes: raw.length,
+      bodySha256: createHash("sha256").update(raw).digest("hex").slice(0, 12),
+    });
   }
 
   // Ack immediately so Kapso doesn't retry on slow downstream work; process after.

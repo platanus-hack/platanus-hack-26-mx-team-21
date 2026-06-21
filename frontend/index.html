@@ -3,6 +3,18 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!--
+      Content-Security-Policy. A <meta> tag is the simplest portable option; a host
+      `_headers` file (Netlify/Cloudflare/Fly static) would be preferable in prod since
+      headers also cover non-HTML responses and allow `frame-ancestors`/`Report-To`.
+      Scope: app assets self-hosted; Supabase (REST + wss realtime); CityCrawl API;
+      Carto/OSM map tiles; Google Fonts. script-src is locked to 'self'.
+      localhost:8090 is the dev API origin (harmless in prod — never connected to there).
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://*.basemaps.cartocdn.com; connect-src 'self' https://joixzhdpnxqhnuscxsoy.supabase.co wss://joixzhdpnxqhnuscxsoy.supabase.co https://citycrawl-api.fly.dev http://localhost:8090; worker-src 'self' blob:; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'"
+    />
     <title>CityCrawl · Mapa de prioridades CDMX</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

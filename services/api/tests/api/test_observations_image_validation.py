@@ -25,11 +25,15 @@ class _FakeObsStore:
     def __init__(self, dsn):
         pass
 
+    def lookup_by_message_id(self, kapso_message_id):
+        return None
+
     def create_citizen_observation(self, **kw):
         return {
             "observation_id": str(kw["observation_id"]),
             "in_boundary": True,
             "thumbnail_path": kw["thumbnail_path"],
+            "deduped": False,
         }
 
 
@@ -46,11 +50,12 @@ def env(monkeypatch):
     get_settings.cache_clear()
 
 
-def _post(raw_client, *, content, filename="report.jpg", content_type="image/jpeg"):
+def _post(raw_client, *, content, filename="report.jpg", content_type="image/jpeg",
+          lat="19.4326", lng="-99.1332"):
     return raw_client.post(
         "/v1/observations/citizen",
         data={
-            "lat": "19.4326", "lng": "-99.1332",
+            "lat": lat, "lng": lng,
             "observed_at": "2026-06-21T00:00:00Z", "observation_type": "pothole",
         },
         files={"image": (filename, content, content_type)},
@@ -85,10 +90,30 @@ def test_magic_byte_mismatch_rejected(raw_client, env):
 
 
 def test_oversize_image_rejected_on_read(raw_client, env):
-    # Below the middleware's Content-Length check is hard to trigger via TestClient, so we
-    # lower the cap and rely on the explicit len(data) guard in the route.
+    # The bounded chunked read aborts with 413 once the running total exceeds the cap, even
+    # without a (spoofable/absent) Content-Length. Lower the cap and oversend.
     env.setenv("MAX_UPLOAD_BYTES", "16")
     get_settings.cache_clear()
     r = _post(raw_client, content=JPEG + b"\x00" * 64, content_type="image/jpeg")
     assert r.status_code == 413
     assert r.json()["error"]["code"] == "payload_too_large"
+
+
+@pytest.mark.parametrize("lat,lng", [
+    ("91", "0"), ("-91", "0"), ("0", "181"), ("0", "-181"),
+])
+def test_out_of_range_coordinates_rejected(raw_client, env, lat, lng):
+    # ge/le Form bounds -> 422 invalid_request before the route body runs.
+    r = _post(raw_client, content=JPEG, lat=lat, lng=lng)
+    assert r.status_code == 422
+    assert r.json()["error"]["code"] == "invalid_request"
+
+
+@pytest.mark.parametrize("lat,lng", [("nan", "0"), ("0", "inf"), ("0", "-inf")])
+def test_non_finite_coordinates_rejected(raw_client, env, lat, lng):
+    # NaN/inf are rejected before the handler body: pydantic's ge/le bound comparison fails
+    # for non-finite values (422 invalid_request). The explicit isfinite() guard in the route
+    # is defense-in-depth should the bounds ever be loosened.
+    r = _post(raw_client, content=JPEG, lat=lat, lng=lng)
+    assert r.status_code == 422
+    assert r.json()["error"]["code"] == "invalid_request"
