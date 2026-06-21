@@ -12,7 +12,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "../lib/auth";
 import * as api from "../lib/api";
 import { useObservationStream, type Toast } from "../lib/observationStream";
-import { fetchObjectUrl, THUMBNAIL_BUCKET } from "../lib/objects";
+import { fetchObjectUrl, fetchBlobUrl, THUMBNAIL_BUCKET } from "../lib/objects";
 import { optimizePlan, chatDraft } from "../lib/citycrawlApi";
 import {
   ACTIVE_ISSUE_TYPES,
@@ -483,9 +483,6 @@ export function MapPage() {
   const onToggleRegion = (cve: string) =>
     setRegionFilter((rf) => (rf.includes(cve) ? rf.filter((c) => c !== cve) : [...rf, cve]));
 
-  const onAdjCost = (slug: string, delta: number) =>
-    setCosts((cs) => ({ ...cs, [slug]: Math.max(0, (cs[slug] ?? 0) + delta) }));
-
   const locateSquad = (lat: number, lng: number) =>
     setPanTarget({ lat, lng, n: (panTarget?.n ?? 0) + 1 });
 
@@ -526,7 +523,7 @@ export function MapPage() {
 
       // Trigger optimization only on an explicit generate intent with a runnable issue type;
       // fire-and-forget so the reply bubble renders before the preview takes over.
-      if (res.generate && draft.issueType && ACTIVE_ISSUE_TYPES.has(draft.issueType)) {
+      if (res.generate && ACTIVE_ISSUE_TYPES.has(nextIssue)) {
         void startPlan({
           issueType: nextIssue,
           budget: nextBudget,
@@ -615,6 +612,8 @@ export function MapPage() {
         />
       )}
 
+      {sweepRoute && <SweepVideo route={sweepRoute} />}
+
       <LayersPanel
         types={types}
         totalObs={observations.length}
@@ -647,14 +646,9 @@ export function MapPage() {
       />
 
       <AnalysisDock
-        issueType={issueType}
         budget={budget}
         regions={regions}
         regionFilter={regionFilter}
-        squadOverride={squadOverride}
-        costs={costs}
-        types={types}
-        typeLabels={typeLabels}
         pointCount={pointCount}
         previewing={previewing}
         generating={generating}
@@ -662,12 +656,9 @@ export function MapPage() {
         hasHistory={historyItems.length > 0}
         open={dockOpen}
         onToggleOpen={() => setDockOpen((v) => !v)}
-        onSetIssueType={setIssueType}
         onBudget={setBudget}
         onToggleRegion={onToggleRegion}
         onClearRegions={() => setRegionFilter([])}
-        onSetSquadOverride={setSquadOverride}
-        onAdjCost={onAdjCost}
         onGenerate={onGenerate}
         onToggleHistory={() => setHistOpen((v) => !v)}
         onHeight={setDockHeight}
@@ -757,6 +748,58 @@ function SweepBanner({
       >
         ×
       </Button>
+    </Panel>
+  );
+}
+
+// Inline player for a sweep's recorded inspection footage. Streams the R2 sweep-video
+// object through the broker (as an authorized blob: URL) and plays it under the banner.
+// Renders nothing until a video path is present and the bytes resolve.
+function SweepVideo({ route }: { route: SweepRoute | null }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const path = route?.videoPath ?? null;
+  const bucket = route?.videoBucket ?? null;
+
+  useEffect(() => {
+    if (!path || !bucket) {
+      setSrc(null);
+      return;
+    }
+    let url: string | null = null;
+    let alive = true;
+    fetchBlobUrl(bucket, path).then((u) => {
+      if (!alive) {
+        if (u) URL.revokeObjectURL(u);
+        return;
+      }
+      url = u;
+      setSrc(u);
+    });
+    return () => {
+      alive = false;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [bucket, path]);
+
+  if (!path) return null;
+
+  return (
+    <Panel className="absolute left-1/2 top-[62px] z-[540] w-[360px] max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden p-1.5">
+      {src ? (
+        <video
+          src={src}
+          controls
+          autoPlay
+          loop
+          muted
+          playsInline
+          className="block w-full rounded-[7px] bg-black"
+        />
+      ) : (
+        <div className="flex aspect-video items-center justify-center gap-2 rounded-[7px] bg-[#0c1118] text-[12px] text-white/70">
+          <Spinner size={14} /> Cargando video…
+        </div>
+      )}
     </Panel>
   );
 }

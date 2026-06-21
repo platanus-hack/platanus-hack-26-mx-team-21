@@ -140,6 +140,10 @@ export type Database = {
           origin_lng: number
           started_at: string
           sweep: string
+          video_bucket: string | null
+          video_path: string | null
+          video_duration_ms: number | null
+          video_fps: number | null
         }[]
       }
       app_tenant_boundary: { Args: never; Returns: Json }

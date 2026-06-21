@@ -107,6 +107,12 @@ export interface SweepRoute {
   coverage: unknown;
   originLat: number;
   originLng: number;
+  // Recorded inspection footage (R2 sweep-video), null when the sweep has none. The
+  // path is served through the broker; the "Ver recorrido" overlay plays it inline.
+  videoBucket: string | null;
+  videoPath: string | null;
+  videoDurationMs: number | null;
+  videoFps: number | null;
 }
 
 export interface Roi {

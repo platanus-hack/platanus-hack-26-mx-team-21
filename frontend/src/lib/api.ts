@@ -97,6 +97,10 @@ export async function getSweepRoute(id: string): Promise<SweepRoute | null> {
     coverage: r.coverage_geojson,
     originLat: r.origin_lat,
     originLng: r.origin_lng,
+    videoBucket: r.video_bucket ?? null,
+    videoPath: r.video_path ?? null,
+    videoDurationMs: r.video_duration_ms ?? null,
+    videoFps: r.video_fps ?? null,
   };
 }
 

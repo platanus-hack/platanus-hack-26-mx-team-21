@@ -5,8 +5,29 @@
 import { supabase } from "./supabase";
 
 export const THUMBNAIL_BUCKET = "observation-thumbnails";
+export const SWEEP_VIDEO_BUCKET = "sweep-video";
 
 const BROKER = import.meta.env.VITE_BROKER_URL as string | undefined;
+
+// Fetch an authorized object as a plain blob: URL — no image decode-check, so it works for
+// video (and anything non-image). Callers own the URL and should URL.revokeObjectURL it when
+// done. Returns null if unconfigured / unauthenticated / denied / missing. Never throws.
+export async function fetchBlobUrl(bucket: string, path: string): Promise<string | null> {
+  if (!BROKER || !path) return null;
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) return null;
+    const url =
+      `${BROKER.replace(/\/$/, "")}/api/r2/object` +
+      `?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(path)}`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) return null;
+    return URL.createObjectURL(await res.blob());
+  } catch {
+    return null;
+  }
+}
 
 // Fetch an object the current user is authorized to view and return a blob: URL for it
 // (or null if unconfigured / unauthenticated / denied / missing). Callers own the URL and
