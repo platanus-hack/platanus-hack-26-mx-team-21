@@ -1,6 +1,6 @@
 # team-21 Platanus Hack 26: CityCrawl
 
-<img src="./project-logo.png" alt="Project Logo" width="200" />
+<img src="./project-logo.png" alt="Logo del proyecto" width="200" />
 
 Track: ☎️ Legacy
 
@@ -12,165 +12,86 @@ team-21
 - Sofia Ingigerth Cañas Urbina ([@sicupath](https://github.com/sicupath))
 - Roberto Mendivil ([@robertomendivil97](https://github.com/robertomendivil97))
 
+---
 
-# City Infrastructure Reporting & Optimization System
+**CityCrawl** detecta, prioriza y optimiza la reparación de infraestructura urbana
+(baches, coladeras, luminarias, señalización) combinando video a nivel calle,
+modelos de visión y datos externos de riesgo en un **mapa de prioridad** que decide
+dónde gastar el presupuesto.
 
-A system for **detecting, prioritizing, and acting on urban infrastructure issues**
-(potholes, open sewers, broken lights, missing signage, etc.) by combining
-street-level video capture, vision models, and external risk datasets into a
-single **priority map** that helps city stakeholders spend their budget where it
-matters most.
+🌐 **[citycrawl.dev](https://citycrawl.dev)** — `tester@citycrawl.dev` / `Test1234!`
 
-<img src="./vision-screen.png" alt="Computer Vision" width="400" />
-
-
-## Live App
-
-🌐 **[citycrawl.dev](https://citycrawl.dev)**
-
-Test credentials:
-
-- **Email:** `tester@citycrawl.dev`
-- **Password:** `Test1234!`
+<img src="./vision-screen.png" alt="Visión por computadora" width="400" />
 
 ---
 
-## Premise
+## Pipeline
 
-1. **Capture.** Monitoring cameras are deployed across the city on different
-   routes and cadences — ad-hoc routes, or opportunistically by attaching
-   cameras to existing fleets such as trash trucks. They record street video
-   tagged with **geolocalised, discretised timestamps**, and stream it to a
-   storage server for **offline** processing.
+1. **Captura.** Cámaras en rutas o montadas en flotas que ya circulan (camiones de
+   basura). Video con timestamp georreferenciado → Cloudflare R2 (`sweep-video`)
+   para procesamiento offline.
+2. **Detección.** Modelo de visión sobre el video → `vision.observations`:
+   problemas tipados, ubicados, con confianza y referencia al frame de origen.
+3. **Prioridad.** Cruza observaciones con riesgo externo (accidentes SSC, crimen
+   FGJ) anclado a geografía INEGI (AGEE → AGEM → AGEB) → mapa de prioridad
+   (capas de instancias y de calor).
+4. **Problemas latentes.** Zonas de alto riesgo **sin** detecciones se marcan como
+   ROIs y se corre un **VLM** sobre los timestamps de video de esa región para
+   hipotetizar lo que el detector no vio (iluminación, semáforos faltantes).
+5. **Optimización.** Dado un presupuesto, maximiza impacto/peso (ver abajo).
 
-2. **Detect.** A vision model runs over the stored video to detect urban
-   infrastructure issues and produce **issue instances** with locations
-   (e.g. potholes, open sewers, broken lights).
+## Optimización del gasto
 
-3. **Prioritize.** Issue locations alone are not actionable. The system computes
-   a **priority** for each instance using **external signals** such as car-crash
-   datasets and crime activity. The result is a **priority map**.
+`ActionableOptimization/pipeline`: agrupa baches por calle en *clusters* →
+*superclusters* (tope de puntos), estima flujo vehicular con la **TomTom Traffic
+Flow API**, y hace selección **greedy** de superclusters por peso descendente
+hasta agotar el presupuesto.
 
-4. **Surface latent issues.** The same priority map is a driver for finding
-   issues that the detector *didn't* flag. Where external risk is high but no
-   issues were detected (e.g. a zone with many car crashes but no potholes),
-   that's a signal of a **latent problem** — missing lighting, missing transit
-   signals, etc. These candidates are investigated by running a **VLM** over the
-   video timestamps captured while passing through those **regions of interest
-   (ROIs)**.
+- **Peso (descontento)** = `velocidad × flujo vehicular semanal × volumen`
+- **Costo** por supercluster = `2000 + 8000 × volumen total`
 
-5. **Decide.** The priority map gives stakeholders (e.g. government) the
-   information to make informed decisions and **optimize their budget**.
+## Operación en lenguaje natural (Track ☎️ Legacy)
 
-6. **Interact simply.** The application is meant to be simple, driven mostly by
-   **natural-language interactions and events** — for example, prompting the
-   system to start reviewing a new *type* of issue.
+- **Prompts** → `/v1/llm/drafts:parse` (adaptador Anthropic) resuelve *"mejor ruta
+  en Gustavo A. Madero, presupuesto 3M"* contra el catálogo INEGI a un **borrador
+  editable**. Nunca ejecuta directo: el usuario confirma el draft estructurado.
+- **WhatsApp** → `services/whatsapp-controller` (Kapso): máquina de estados de dos
+  mensajes (foto + pin de ubicación, porque WhatsApp borra el EXIF GPS) que postea
+  a `POST /v1/observations/citizen` y la observación aparece en el mapa.
 
----
+## Arquitectura
 
-## Components
+| Componente | Stack | Notas |
+|---|---|---|
+| Web app | Vite + React + Tailwind v4, Cloudflare Pages | lee RPCs `public.app_*`; llama a la API de planning |
+| API | FastAPI (monolito modular), Fly.io | `/v1/planning/optimize`, `priorities:cluster`, `llm/drafts:parse`, `datasets/refresh` (NDJSON) |
+| Optimización | Python + TomTom Traffic API | clustering → superclustering → greedy por presupuesto |
+| Broker de medios | Cloudflare Worker | `GET /api/r2/object`; autoriza vía RPC `public.app_authorize_object` antes de streamear R2 |
+| Datos y auth | Supabase (PostgreSQL/PostGIS) | RLS por inquilino, geografía INEGI, observaciones, prioridades |
+| WhatsApp | Node/TS + Kapso | reportes ciudadanos foto + pin |
 
-Each component is intended to be developed **in parallel and independently**.
-The descriptions below define *what each part is responsible for* and *what it
-consumes/produces* — not how it's built.
+Buckets R2 privados: `sweep-video`, `observation-thumbnails`, `tenant-tiles`,
+`external-data`. Sin Supabase Storage ni URLs firmadas — todo medio pasa por el broker.
 
-### 1. Capture & Streaming
-- Deploys cameras on routes/cadences (ad-hoc routes, trash-truck-mounted, etc.).
-- Produces street video annotated with **geolocalised, discretised timestamps**.
-- Streams captured media to the storage layer for offline processing.
+**Runs reproducibles:** cada análisis congela sus insumos (geografía, observaciones
+elegibles, presupuesto, versión de proveedor), así el resultado es explicable y
+repetible aunque los datos en vivo cambien durante el cómputo.
 
-### 2. Storage
-- Receives and stores **raw video plus capture metadata** (location, time,
-  route/platform) in **Cloudflare R2** private buckets (`sweep-video`,
-  `observation-thumbnails`, `tenant-tiles`, `external-data`).
-- Protected media and tiles are served through a **Cloudflare Worker broker**
-  (`r2-access-broker`) that validates the caller's Supabase JWT via a Postgres
-  RPC before streaming bytes from R2. No Supabase Storage or signed URLs are used.
-- Serves as the source of truth that downstream offline processing reads from.
+## Datos de riesgo
 
-### 3. Issue Detection (Vision)
-- Runs a vision model over stored video.
-- Produces **issue instances**: typed infrastructure problems with a location,
-  a confidence, and a reference back to the source video/frame.
+Fuentes primarias de open data gubernamental, en lotes anuales (el batch geolocalizado
+más fresco es 2024): SSC *Hechos de tránsito* (accidentes CDMX), FGJ *Carpetas de
+investigación* (crimen CDMX), INEGI *Marco Geoestadístico*. Son **priors espaciales
+estables** — dónde se concentran riesgos —, no un feed en tiempo real (no existe uno
+abierto). Investigación completa: [`docs/research/external-risk-datasets.md`](docs/research/external-risk-datasets.md).
 
-### 4. Priority Engine
-- Ingests **external signals** (car-crash datasets, crime activity, etc.).
-- Combines detected issues with external risk to compute a **priority map**
-  over the city.
+## Despliegue
 
-### 5. Latent Issue Detection
-- Uses the priority map to find **high-risk zones with few/no detected issues**.
-- Selects those zones as **ROIs** and runs a **VLM** over the corresponding
-  video timestamps to hypothesize **latent issues** (missing lighting, missing
-  transit signals, etc.).
+Stack reproducible de punta a punta desde un runbook:
+**[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)** (orden de dependencias, matriz de env,
+verificación, fallas comunes).
 
-### 6. Application (Monitoring & Decisions)
-- A **simple** interface for stakeholders to review detected issues and the
-  priority map.
-- Driven primarily by **natural-language interactions and events** (e.g. a
-  prompt to begin reviewing a new issue type).
-- Supports informed, budget-optimizing decisions.
-
----
-
-## Data Flow (conceptual)
-
-```
-Cameras (routes / trash trucks)
-        │  geolocalised, discretised, timestamped video (streamed)
-        ▼
-  Cloudflare R2  ────────────────────────────────────────────┐
-  (+ access broker)
-        │                                                     │
-        │ video + capture metadata                            │
-        ▼                                                     │
- Issue Detection (vision)                                     │
-        │ issue instances (typed, located, scored)            │
-        ▼                                                     │
- Priority Engine ◀── external signals (car crashes, crime)    │
-        │ priority map                                        │
-        ├──────────────► Application (review, decide, prompt) │
-        ▼                                                     │
- Latent Issue Detection ── selects ROIs ─────────────────────┘
-        │ runs VLM over ROI video timestamps
-        ▼ latent issue hypotheses
-   (back into priority map / application)
-```
-
----
-
-## Deployment
-
-The full stack — Supabase (Auth + Postgres), Cloudflare R2 + the `r2-access-broker`
-Worker, the `citycrawl-api` Fly app, and the Cloudflare Pages frontend at
-`citycrawl.dev` — is reproducible end-to-end from one runbook:
-
-**→ [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)** (dependency order, env-var matrix,
-verification checklist, common failure modes).
-
-Per-component detail: [`frontend/README.md`](frontend/README.md),
-[`services/api/README.md`](services/api/README.md),
-[`services/broker/README.md`](services/broker/README.md),
-[`supabase/seed/README.md`](supabase/seed/README.md). Adding a tenant test user:
-[`docs/runbooks/create-tenant-user.md`](docs/runbooks/create-tenant-user.md).
-
----
-
-## Repository Principles
-
-Because components are built **in parallel and independently**, the repo is
-organized to **counter interface drift across modules**:
-
-- **Monorepo.** All components live in one repository so changes that cross
-  module boundaries are visible and reviewable together.
-- **Modular development.** Each component is self-contained, owns its own
-  responsibilities, and can be developed, run, and tested on its own.
-- **Shared contracts.** The data passed *between* modules (e.g. capture
-  metadata, issue instances, external signals, priority map, ROIs, latent
-  hypotheses) should be defined in a **single shared place** that every module
-  depends on — so independent teams stay aligned and interfaces don't silently
-  drift apart.
-
-> The concrete monorepo layout, languages, tooling, and the format of the shared
-> contracts are **not decided here** — they will be chosen as components come
-> online.
+Por componente: [`frontend`](frontend/README.md) ·
+[`api`](services/api/README.md) · [`broker`](services/broker/README.md) ·
+[`whatsapp-controller`](services/whatsapp-controller/README.md) ·
+[`supabase/seed`](supabase/seed/README.md).
