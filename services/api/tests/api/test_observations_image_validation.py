@@ -37,15 +37,30 @@ class _FakeObsStore:
         }
 
 
+class _ConfirmingJobStore:
+    """Stands in for the inference confirmation gate: always confirms, no DB."""
+
+    def __init__(self, dsn):
+        pass
+
+    def enqueue(self, **kw):
+        import uuid
+
+        return uuid.uuid4()
+
+    def wait_for_result(self, job_id, **kw):
+        return {"status": "done", "response": {"confirmed": True}, "error": None}
+
+
 @pytest.fixture
 def env(monkeypatch):
     monkeypatch.setenv("OPERATOR_API_KEY", "secret-op-key")
     monkeypatch.setenv("STORAGE_BACKEND", "local")
     monkeypatch.setenv("DB_URL", "postgresql://fake")
-    monkeypatch.setenv("INFERENCE_CONFIRMATION_ENABLED", "false")
     get_settings.cache_clear()
     monkeypatch.setattr(obs_route, "make_thumbnail_store", _fake_make_thumbnail_store)
     monkeypatch.setattr(obs_route, "PgObservationStore", _FakeObsStore)
+    monkeypatch.setattr(obs_route, "PgInferenceJobStore", _ConfirmingJobStore)
     yield monkeypatch
     get_settings.cache_clear()
 
