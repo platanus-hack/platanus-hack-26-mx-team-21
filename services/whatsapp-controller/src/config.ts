@@ -24,11 +24,16 @@ export interface Config {
     secret: string;
     signatureHeader: string;
     signatureRequired: boolean;
+    rateLimitPerMin: number;
   };
   writeApi: {
     mode: WriteApiMode;
     baseUrl: string;
     token: string;
+  };
+  media: {
+    maxBytes: number;
+    fetchTimeoutMs: number;
   };
   defaultObservationType: string;
   sessionTtlMs: number;
@@ -46,11 +51,16 @@ export const config: Config = {
     secret: process.env.KAPSO_WEBHOOK_SECRET ?? "",
     signatureHeader: (process.env.KAPSO_SIGNATURE_HEADER ?? "x-webhook-signature").toLowerCase(),
     signatureRequired: bool(process.env.KAPSO_SIGNATURE_REQUIRED, false),
+    rateLimitPerMin: int(process.env.WEBHOOK_RATE_LIMIT_PER_MIN, 120),
   },
   writeApi: {
     mode: (process.env.WRITE_API_MODE as WriteApiMode) === "http" ? "http" : "dry-run",
     baseUrl: process.env.WRITE_API_BASE_URL ?? "",
     token: process.env.WRITE_API_TOKEN ?? "",
+  },
+  media: {
+    maxBytes: int(process.env.MAX_MEDIA_BYTES, 16 * 1024 * 1024),
+    fetchTimeoutMs: int(process.env.MEDIA_FETCH_TIMEOUT_MS, 15_000),
   },
   defaultObservationType: process.env.DEFAULT_OBSERVATION_TYPE ?? "pothole",
   sessionTtlMs: int(process.env.SESSION_TTL_MINUTES, 15) * 60_000,
@@ -67,5 +77,10 @@ export function validateConfig(): string[] {
   if (config.webhook.signatureRequired && !config.webhook.secret) {
     problems.push("KAPSO_WEBHOOK_SECRET is required when KAPSO_SIGNATURE_REQUIRED=true");
   }
+  if (config.webhook.rateLimitPerMin <= 0) {
+    problems.push("WEBHOOK_RATE_LIMIT_PER_MIN must be a positive integer");
+  }
+  if (config.media.maxBytes <= 0) problems.push("MAX_MEDIA_BYTES must be a positive integer");
+  if (config.media.fetchTimeoutMs <= 0) problems.push("MEDIA_FETCH_TIMEOUT_MS must be a positive integer");
   return problems;
 }

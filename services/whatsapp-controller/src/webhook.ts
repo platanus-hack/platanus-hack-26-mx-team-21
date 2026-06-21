@@ -5,17 +5,66 @@ import { config } from "./config";
 import { logger } from "./logger";
 import type { InboundKind, NormalizedMessage } from "./types";
 
+/** Which payload encoding produced the matching HMAC (for shadow-mode logging). */
+export type SignatureVariant = "raw" | "reserialized" | null;
+
+export interface SignatureResult {
+  /** True if the provided signature matched ANY accepted candidate. */
+  matched: boolean;
+  /** Which candidate matched (null when no match). */
+  variant: SignatureVariant;
+  /** Whether a webhook secret is configured. */
+  hadSecret: boolean;
+  /** Whether the request carried a signature header. */
+  hadSignature: boolean;
+}
+
 /**
- * Verify the webhook signature against the raw body.
- * - No secret configured -> allowed unless KAPSO_SIGNATURE_REQUIRED=true.
- * - Secret configured     -> HMAC-SHA256(rawBody) must match the header (hex or `sha256=` prefixed).
+ * Verify Kapso's `x-webhook-signature` (hex HMAC-SHA256 of the payload, keyed by the
+ * webhook secret) against the raw body, timing-safe.
+ *
+ * Kapso's docs sign `JSON.stringify(payload)` (a re-serialized form), but a sender may
+ * instead sign the raw received bytes. We tolerate BOTH:
+ *   - candidate A ("raw"):          HMAC over the raw body buffer as received.
+ *   - candidate B ("reserialized"): HMAC over `JSON.stringify(JSON.parse(rawBody))`.
+ * Either `<hex>` or `sha256=<hex>` header forms are accepted.
+ *
+ * Returns a rich result so callers can run a shadow (log-only) phase before enforcing.
  */
-export function verifyWebhookSignature(rawBody: Buffer, header: string | undefined): boolean {
-  const { secret, signatureRequired } = config.webhook;
-  if (!secret) return !signatureRequired;
-  if (!header) return false;
-  const hex = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
-  const provided = header.trim();
+export function checkWebhookSignature(rawBody: Buffer, header: string | undefined): SignatureResult {
+  const { secret } = config.webhook;
+  const provided = header?.trim();
+  const hadSecret = Boolean(secret);
+  const hadSignature = Boolean(provided);
+  if (!secret || !provided) {
+    return { matched: false, variant: null, hadSecret, hadSignature };
+  }
+
+  const rawHex = hmacHex(secret, rawBody);
+  if (matchesHeader(rawHex, provided)) {
+    return { matched: true, variant: "raw", hadSecret, hadSignature };
+  }
+
+  // Re-serialized candidate. Parsing can fail on non-JSON bodies; that's fine — no match.
+  try {
+    const reserialized = JSON.stringify(JSON.parse(rawBody.toString("utf8")));
+    const reHex = hmacHex(secret, Buffer.from(reserialized, "utf8"));
+    if (matchesHeader(reHex, provided)) {
+      return { matched: true, variant: "reserialized", hadSecret, hadSignature };
+    }
+  } catch {
+    // not JSON -> no re-serialized candidate
+  }
+
+  return { matched: false, variant: null, hadSecret, hadSignature };
+}
+
+function hmacHex(secret: string, data: Buffer): string {
+  return crypto.createHmac("sha256", secret).update(data).digest("hex");
+}
+
+/** Accept either `<hex>` or `sha256=<hex>` header forms, timing-safe. */
+function matchesHeader(hex: string, provided: string): boolean {
   return safeEqual(hex, provided) || safeEqual(`sha256=${hex}`, provided);
 }
 

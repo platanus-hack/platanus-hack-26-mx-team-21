@@ -3,13 +3,15 @@ import { config, validateConfig } from "./config";
 import { logger } from "./logger";
 import { ConversationEngine } from "./conversation";
 import { KapsoGateway } from "./kapso";
-import { parseInbound, verifyWebhookSignature } from "./webhook";
+import { parseInbound, checkWebhookSignature } from "./webhook";
+import { FixedWindowRateLimiter, clientIp } from "./rateLimit";
 
 const problems = validateConfig();
 if (problems.length) logger.warn("config issues (continuing)", { problems });
 
 const app = express();
 const engine = new ConversationEngine(new KapsoGateway());
+const webhookLimiter = new FixedWindowRateLimiter(config.webhook.rateLimitPerMin);
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true, mode: config.writeApi.mode });
@@ -28,21 +30,41 @@ app.get("/webhook", (req, res) => {
 });
 
 app.post("/webhook", express.raw({ type: "*/*", limit: "10mb" }), (req, res) => {
+  // (a) Per-IP rate limit first — reject floods cheaply before any parsing/crypto.
+  const ip = clientIp(req);
+  const rl = webhookLimiter.hit(ip);
+  if (!rl.allowed) {
+    logger.warn("webhook rate limited", { ip, limit: rl.limit });
+    res.sendStatus(429);
+    return;
+  }
+
   const raw = req.body as Buffer;
   const signature = req.header(config.webhook.signatureHeader);
 
-  // TEMP: surface signature-like headers so we can confirm Kapso's signing scheme.
-  const sigHeaders = Object.keys(req.headers).filter((h) => /sign|hub|kapso|hmac/i.test(h));
-  if (sigHeaders.length) {
-    logger.info("webhook sig headers", {
-      headers: sigHeaders.map((h) => `${h}: ${String(req.headers[h]).slice(0, 24)}`),
-    });
-  }
+  // (b) Always compute the signature result (shadow mode). Never log secrets,
+  // the signature value, or the body.
+  const sig = checkWebhookSignature(raw, signature);
+  logger.info("webhook signature check", {
+    matched: sig.matched,
+    variant: sig.variant,
+    hadSecret: sig.hadSecret,
+    hadSignature: sig.hadSignature,
+    enforced: config.webhook.signatureRequired,
+  });
 
-  if (!verifyWebhookSignature(raw, signature)) {
-    logger.warn("invalid webhook signature");
-    res.sendStatus(401);
-    return;
+  // (c) Enforcement (fail-closed). In shadow mode (signatureRequired=false) we never reject.
+  if (config.webhook.signatureRequired) {
+    if (!sig.hadSecret) {
+      logger.error("signature enforcement enabled but no webhook secret configured (failing closed)");
+      res.sendStatus(401);
+      return;
+    }
+    if (!sig.matched) {
+      logger.warn("invalid webhook signature (enforced)");
+      res.sendStatus(401);
+      return;
+    }
   }
 
   let payload: unknown;
