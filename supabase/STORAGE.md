@@ -169,5 +169,5 @@ When you (or the app's runtime agents) deal with stored objects:
 | Broker Worker (authz-forward, binding serve, Range support) | §3.B | Done — Task 4 |
 | `app_authorize_object` RPC + drop Supabase Storage | §3.C | Done — Tasks 3 & 7 |
 | External-data pipeline (S3 backend + container) | §3.D | Done — Tasks 2 & 5 |
-| SPA hosting + media/tiles via broker | §3.F | Pending — blocked on `apps/web` existing |
+| SPA hosting + media/tiles via broker | §3.F | Pending — blocked on `frontend` existing |
 | Vision/tile worker (Container, writes via S3) | §3.E | Pending — blocked on `services/worker` code |
