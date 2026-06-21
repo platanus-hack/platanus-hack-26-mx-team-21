@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     ingest_service_key: str | None = None
 
     # --- Citizen-report confirmation gate (non-public inference server) -------
+    # Kill switch: when False, skip the synchronous vision-confirmation gate and create the
+    # observation immediately (the photo still renders; confirmation can be done async later).
+    # Default True preserves the gate; set INFERENCE_CONFIRMATION_ENABLED=false to disable it
+    # (e.g. when the inference server is slow/unavailable and reports are timing out).
+    inference_confirmation_enabled: bool = True
     inference_thinking_mode: str = "flash"     # 'flash' | 'thinking'
     inference_timeout_s: float = 60.0
     inference_poll_interval_s: float = 1.0
