@@ -231,3 +231,6 @@ __marimo__/
 .claude/
 .claire/
 frontend/verify_tmp.cjs
+
+# local object-storage backend (services/api LOCAL_ROOT)
+.data/

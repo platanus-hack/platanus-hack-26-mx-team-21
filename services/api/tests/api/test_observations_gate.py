@@ -21,11 +21,15 @@ class _FakeObsStore:
     def __init__(self, dsn):
         pass
 
+    def lookup_by_message_id(self, kapso_message_id):
+        return None
+
     def create_citizen_observation(self, **kw):
         return {
             "observation_id": str(kw["observation_id"]),
             "in_boundary": True,
             "thumbnail_path": kw["thumbnail_path"],
+            "deduped": False,
         }
 
 

@@ -22,16 +22,44 @@ logger = get_logger()
 def create_app() -> FastAPI:
     configure_logging()
     settings = get_settings()
+    # Fail fast on unsafe CORS/storage config before serving any traffic.
+    settings.validate_startup()
     app = FastAPI(title="citycrawl-api", version=__version__)
 
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "OPTIONS"],
+        # Narrowed from "*": allow_credentials=True must not be paired with a wildcard.
+        allow_headers=settings.cors_allow_headers,
         expose_headers=["X-Request-ID", "X-Planning-Engine"],
     )
+
+    @app.middleware("http")
+    async def body_size_limit(request: Request, call_next):
+        """Reject oversized requests up front via Content-Length so a huge upload can't
+        OOM the worker before the route reads it. Content-Length can be absent or spoofed,
+        so the upload route also guards the actual byte count after reading."""
+        cl = request.headers.get("content-length")
+        if cl is not None:
+            try:
+                declared = int(cl)
+            except ValueError:
+                declared = None
+            if declared is not None and declared > settings.max_upload_bytes:
+                from citycrawl_api.logging import get_request_id
+
+                rid = get_request_id()
+                err = ApiError(
+                    413, "payload_too_large",
+                    "Request body exceeds the maximum allowed size",
+                    {"maxBytes": settings.max_upload_bytes},
+                )
+                return JSONResponse(
+                    status_code=413, content=err.envelope(rid), headers={"X-Request-ID": rid}
+                )
+        return await call_next(request)
 
     @app.middleware("http")
     async def request_context(request: Request, call_next):

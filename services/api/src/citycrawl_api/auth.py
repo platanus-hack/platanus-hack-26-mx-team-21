@@ -75,9 +75,14 @@ async def require_operator(
 
 
 async def require_service(x_operator_key: str | None = Header(default=None)) -> None:
-    """Server-to-server guard: only the operator key, NO user token. For trusted internal
-    callers (e.g. the WhatsApp controller) that have no browser session."""
-    expected = get_settings().operator_api_key
+    """Server-to-server guard for citizen ingest: only a service key, NO user token. For
+    trusted internal callers (e.g. the WhatsApp controller) that have no browser session.
+
+    Key selection: prefer the dedicated INGEST_SERVICE_KEY when configured so the ingest
+    secret can be rotated independently of the dataset-refresh operator key; otherwise fall
+    back to OPERATOR_API_KEY so nothing breaks until the new secret is provisioned."""
+    settings = get_settings()
+    expected = settings.ingest_service_key or settings.operator_api_key
     if not expected:
         raise ApiError(503, "operator_unconfigured", "Operator access is not configured")
     if not x_operator_key or not hmac.compare_digest(x_operator_key, expected):

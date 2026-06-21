@@ -1,6 +1,6 @@
 from __future__ import annotations
-import httpx
 from citycrawl_api.modules.datasets.geocode.base import GeocodeResult
+from citycrawl_api.modules.datasets.net import safe_get
 
 
 class NominatimGeocoder:
@@ -8,7 +8,8 @@ class NominatimGeocoder:
         self.base_url = base_url.rstrip("/")
 
     def geocode(self, text: str) -> GeocodeResult | None:
-        r = httpx.get(
+        # Guarded GET: https + host allowlist (the configured nominatim host) + no redirects.
+        r = safe_get(
             f"{self.base_url}/search",
             params={
                 "q": f"{text}, Ciudad de México, México", "format": "json", "limit": 1,

@@ -78,8 +78,21 @@ export class HttpWriteApi implements WriteApi {
     const headers: Record<string, string> = {};
     if (config.writeApi.token) headers["X-Operator-Key"] = config.writeApi.token;
 
-    const res = await fetch(url, { method: "POST", body: form, headers });
-    const text = await res.text();
+    // Bound the outbound call so a slow/hanging write API doesn't tie up processing.
+    // NOTE: if WRITE_API_TIMEOUT_MS is shorter than a realistic worst-case write, the call
+    // may abort after the API has already committed; retries are SAFE because the API
+    // dedupes on kapso_message_id (idempotency key), so a re-submit returns the existing
+    // observation rather than creating a duplicate.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), config.writeApi.timeoutMs);
+    let text: string;
+    let res: Response;
+    try {
+      res = await fetch(url, { method: "POST", body: form, headers, signal: controller.signal });
+      text = await res.text();
+    } finally {
+      clearTimeout(timer);
+    }
     if (!res.ok) throw new Error(`write API ${res.status}: ${text.slice(0, 200)}`);
 
     const data = (text ? JSON.parse(text) : {}) as Record<string, unknown>;

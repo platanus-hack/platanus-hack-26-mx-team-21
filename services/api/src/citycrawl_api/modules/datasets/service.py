@@ -17,6 +17,9 @@ from datetime import datetime, timezone
 from typing import Iterator
 
 from citycrawl_api.config import Settings
+from citycrawl_api.logging import get_logger
+
+logger = get_logger()
 
 
 def _now() -> datetime:
@@ -59,12 +62,20 @@ class DatasetRefreshService:
         now = _now()
 
         def err(stage: str, exc: Exception) -> dict:
+            # Never serialize str(exc) to the client: it can leak the DSN/host/path or other
+            # internal detail, bypassing the ApiError discipline (and the stream has already
+            # started, so we can't switch to a normal HTTP error). Emit a STATIC per-stage
+            # message and record the real detail server-side keyed by request id.
+            logger.exception(
+                "dataset_refresh_failed",
+                extra={"fields": {"stage": stage, "requestId": request_id}},
+            )
             return {
                 "type": "error",
                 "stage": stage,
                 "error": {
                     "code": f"dataset_{stage}_failed",
-                    "message": str(exc) or f"{stage} failed",
+                    "message": f"{stage} failed",
                     "requestId": request_id,
                 },
             }

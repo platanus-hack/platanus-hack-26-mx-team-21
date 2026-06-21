@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { logger } from "./logger";
 
 function bool(v: string | undefined, def: boolean): boolean {
   if (v === undefined || v === "") return def;
@@ -24,14 +25,25 @@ export interface Config {
     secret: string;
     signatureHeader: string;
     signatureRequired: boolean;
+    rateLimitPerMin: number;
+    /** App-wide flood ceiling (sum across all clients), independent of per-client keying. */
+    globalRateLimitPerMin: number;
   };
   writeApi: {
     mode: WriteApiMode;
     baseUrl: string;
     token: string;
+    timeoutMs: number;
+  };
+  media: {
+    maxBytes: number;
+    fetchTimeoutMs: number;
   };
   defaultObservationType: string;
   sessionTtlMs: number;
+  maxSessions: number;
+  maxDedupe: number;
+  maxSubmitAttempts: number;
 }
 
 export const config: Config = {
@@ -46,14 +58,24 @@ export const config: Config = {
     secret: process.env.KAPSO_WEBHOOK_SECRET ?? "",
     signatureHeader: (process.env.KAPSO_SIGNATURE_HEADER ?? "x-webhook-signature").toLowerCase(),
     signatureRequired: bool(process.env.KAPSO_SIGNATURE_REQUIRED, false),
+    rateLimitPerMin: int(process.env.WEBHOOK_RATE_LIMIT_PER_MIN, 120),
+    globalRateLimitPerMin: int(process.env.WEBHOOK_GLOBAL_RATE_LIMIT_PER_MIN, 2_000),
   },
   writeApi: {
     mode: (process.env.WRITE_API_MODE as WriteApiMode) === "http" ? "http" : "dry-run",
     baseUrl: process.env.WRITE_API_BASE_URL ?? "",
     token: process.env.WRITE_API_TOKEN ?? "",
+    timeoutMs: int(process.env.WRITE_API_TIMEOUT_MS, 20_000),
+  },
+  media: {
+    maxBytes: int(process.env.MAX_MEDIA_BYTES, 16 * 1024 * 1024),
+    fetchTimeoutMs: int(process.env.MEDIA_FETCH_TIMEOUT_MS, 15_000),
   },
   defaultObservationType: process.env.DEFAULT_OBSERVATION_TYPE ?? "pothole",
   sessionTtlMs: int(process.env.SESSION_TTL_MINUTES, 15) * 60_000,
+  maxSessions: int(process.env.MAX_SESSIONS, 10_000),
+  maxDedupe: int(process.env.MAX_DEDUPE, 50_000),
+  maxSubmitAttempts: int(process.env.MAX_SUBMIT_ATTEMPTS, 5),
 };
 
 /** Returns a list of human-readable config problems (empty when healthy). */
@@ -67,5 +89,27 @@ export function validateConfig(): string[] {
   if (config.webhook.signatureRequired && !config.webhook.secret) {
     problems.push("KAPSO_WEBHOOK_SECRET is required when KAPSO_SIGNATURE_REQUIRED=true");
   }
+  // Running the real write path while accepting unauthenticated webhooks means any caller
+  // who can reach the endpoint can forge observations. Make this LOUD (error level) rather
+  // than a quiet warning — we don't refuse to start, but it must not pass unnoticed.
+  if (config.writeApi.mode === "http" && !config.webhook.signatureRequired) {
+    logger.error(
+      "SECURITY: WRITE_API_MODE=http but KAPSO_SIGNATURE_REQUIRED is not enabled — " +
+        "webhooks are unauthenticated and observations can be forged. " +
+        "Set KAPSO_SIGNATURE_REQUIRED=true (with KAPSO_WEBHOOK_SECRET) before production use.",
+    );
+  }
+  if (config.webhook.rateLimitPerMin <= 0) {
+    problems.push("WEBHOOK_RATE_LIMIT_PER_MIN must be a positive integer");
+  }
+  if (config.webhook.globalRateLimitPerMin <= 0) {
+    problems.push("WEBHOOK_GLOBAL_RATE_LIMIT_PER_MIN must be a positive integer");
+  }
+  if (config.media.maxBytes <= 0) problems.push("MAX_MEDIA_BYTES must be a positive integer");
+  if (config.media.fetchTimeoutMs <= 0) problems.push("MEDIA_FETCH_TIMEOUT_MS must be a positive integer");
+  if (config.writeApi.timeoutMs <= 0) problems.push("WRITE_API_TIMEOUT_MS must be a positive integer");
+  if (config.maxSessions <= 0) problems.push("MAX_SESSIONS must be a positive integer");
+  if (config.maxDedupe <= 0) problems.push("MAX_DEDUPE must be a positive integer");
+  if (config.maxSubmitAttempts <= 0) problems.push("MAX_SUBMIT_ATTEMPTS must be a positive integer");
   return problems;
 }

@@ -5,6 +5,7 @@ from citycrawl_api.modules.datasets.adapters.base import ExtractContext
 from citycrawl_api.modules.datasets.core.bbox import in_cdmx
 from citycrawl_api.modules.datasets.core.ids import signal_id
 from citycrawl_api.modules.datasets.geocode.base import Extractor, Geocoder
+from citycrawl_api.modules.datasets.net import OutboundFetchError, safe_get
 from citycrawl_api.modules.datasets.registry.models import SourceConfig
 from citycrawl_api.modules.datasets.schema import Signal
 
@@ -41,7 +42,13 @@ def extract(source: SourceConfig, ctx: ExtractContext,
             extractor: Extractor, geocoder: Geocoder) -> list[Signal]:
     entries: list[dict] = []
     for feed in source.feeds:
-        parsed = feedparser.parse(feed)
+        # Fetch the feed through the SSRF guard rather than letting feedparser open the URL
+        # itself (which would bypass the host allowlist / private-IP checks / body cap).
+        try:
+            resp = safe_get(feed, timeout=60)
+        except OutboundFetchError:
+            continue
+        parsed = feedparser.parse(resp.content)
         for it in parsed.entries:
             entries.append({
                 "id": getattr(it, "id", None) or it.get("guid"),

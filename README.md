@@ -1,3 +1,18 @@
+# team-21 Platanus Hack 26: CityCrawl
+
+<img src="./project-logo.png" alt="Project Logo" width="200" />
+
+Track: ☎️ Legacy
+
+team-21
+
+- Pablo César Ruíz Hernández ([@pcruiher08](https://github.com/pcruiher08))
+- Elias Garza Valdes ([@eliasgarzav](https://github.com/eliasgarzav))
+- Andrés Alam Sánchez Torres ([@aast12](https://github.com/aast12))
+- Sofia Ingigerth Cañas Urbina ([@sicupath](https://github.com/sicupath))
+- Roberto Mendivil ([@robertomendivil97](https://github.com/robertomendivil97))
+
+
 # City Infrastructure Reporting & Optimization System
 
 A system for **detecting, prioritizing, and acting on urban infrastructure issues**
@@ -6,9 +21,17 @@ street-level video capture, vision models, and external risk datasets into a
 single **priority map** that helps city stakeholders spend their budget where it
 matters most.
 
-> This document lays out the **context and components** only. It intentionally
-> does **not** decide tech stack, frameworks, data formats, or implementation
-> details — those are deferred and will be chosen per component.
+<img src="./vision-screen.png" alt="Computer Vision" width="400" />
+
+
+## Live App
+
+🌐 **[citycrawl.dev](https://citycrawl.dev)**
+
+Test credentials:
+
+- **Email:** `tester@citycrawl.dev`
+- **Password:** `Test1234!`
 
 ---
 

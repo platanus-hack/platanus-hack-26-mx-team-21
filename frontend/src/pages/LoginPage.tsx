@@ -165,21 +165,23 @@ export function LoginPage() {
             {busy ? "Entrando…" : "Iniciar sesión"}
           </button>
 
-          <div
-            style={{
-              marginTop: 16,
-              fontSize: 10.5,
-              color: "#9aa3b1",
-              fontFamily: "IBM Plex Mono, monospace",
-              lineHeight: 1.6,
-              borderTop: "1px solid #f3f5f8",
-              paddingTop: 12,
-            }}
-          >
-            Demo · author.a@citycrawl.test
-            <br />
-            contraseña: citycrawl-dev-2026!
-          </div>
+          {import.meta.env.DEV && (
+            <div
+              style={{
+                marginTop: 16,
+                fontSize: 10.5,
+                color: "#9aa3b1",
+                fontFamily: "IBM Plex Mono, monospace",
+                lineHeight: 1.6,
+                borderTop: "1px solid #f3f5f8",
+                paddingTop: 12,
+              }}
+            >
+              Demo · author.a@citycrawl.test
+              <br />
+              contraseña: citycrawl-dev-2026!
+            </div>
+          )}
         </form>
       </div>
     </div>

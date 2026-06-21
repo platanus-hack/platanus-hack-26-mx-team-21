@@ -118,6 +118,17 @@ export class ConversationEngine {
       });
     } catch (err) {
       logger.error("media download failed", { err: String(err) });
+      // Count the failed download against the retry cap (it triggered a fetch).
+      session.submitAttempts = (session.submitAttempts ?? 0) + 1;
+      if (session.submitAttempts >= config.maxSubmitAttempts) {
+        logger.warn("submit attempt cap reached after download failures, dropping session", {
+          from: redactPhone(session.phone),
+          attempts: session.submitAttempts,
+        });
+        this.sessions.delete(session.phone);
+        await this.kapso.sendText(session.phone, copy.submitGaveUp());
+        return;
+      }
       session.state = "AWAITING_PHOTO";
       session.pendingMediaId = undefined;
       session.pendingMediaUrl = undefined;
@@ -152,6 +163,17 @@ export class ConversationEngine {
       await this.kapso.sendText(session.phone, reply);
     } catch (err) {
       logger.error("submit failed", { err: String(err) });
+      // Cap retries so a forger can't pin a session and repeatedly trigger downloads.
+      session.submitAttempts = (session.submitAttempts ?? 0) + 1;
+      if (session.submitAttempts >= config.maxSubmitAttempts) {
+        logger.warn("submit attempt cap reached, dropping session", {
+          from: redactPhone(session.phone),
+          attempts: session.submitAttempts,
+        });
+        this.sessions.delete(session.phone);
+        await this.kapso.sendText(session.phone, copy.submitGaveUp());
+        return;
+      }
       // Keep the session so the user can retry by re-sharing the location.
       session.state = "AWAITING_LOCATION";
       this.sessions.set(session);

@@ -76,6 +76,15 @@ export function submitError(): string {
   return "⚠️ Tuvimos un problema al registrar tu reporte. Por favor, vuelve a compartir tu *ubicación* para reintentar.";
 }
 
+// Sent after too many failed submit attempts: stop retrying and reset the conversation.
+export function submitGaveUp(): string {
+  return [
+    "⚠️ No pudimos registrar tu reporte tras varios intentos.",
+    "",
+    "Lo sentimos. Inténtalo más tarde enviando de nuevo la *foto* y tu *ubicación*.",
+  ].join("\n");
+}
+
 export function unsupported(): string {
   return "🤔 Por ahora solo proceso *fotos* y *ubicaciones*. Envíame una foto del problema para empezar.";
 }
