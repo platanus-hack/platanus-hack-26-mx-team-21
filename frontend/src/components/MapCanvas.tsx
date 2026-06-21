@@ -25,7 +25,6 @@ interface Props {
 
 const CARTO_LIGHT = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
 const PIN_RADIUS = 6; // fixed — pins encode volume by COLOR only, never by size
-const ROI_LABEL_ZOOM = 13; // risk-zone labels only appear once zoomed in this far
 
 export const MapCanvas = memo(function MapCanvas(props: Props) {
   const elRef = useRef<HTMLDivElement>(null);
@@ -40,12 +39,14 @@ export const MapCanvas = memo(function MapCanvas(props: Props) {
   const showRoisRef = useRef(props.showRois);
   showRoisRef.current = props.showRois;
 
-  // Show/hide the ROI label layer depending on zoom (and the ROI toggle).
+  // Keep the ROI label layer attached whenever the ROI toggle is on. Individual
+  // labels are added to this group only while their zone is hovered (see below),
+  // so the group itself can stay on the map without cluttering it.
   const syncRoiLabels = () => {
     const map = mapRef.current;
     const labels = groups.current.roiLabels;
     if (!map || !labels) return;
-    const visible = showRoisRef.current && map.getZoom() >= ROI_LABEL_ZOOM;
+    const visible = showRoisRef.current;
     if (visible && !map.hasLayer(labels)) labels.addTo(map);
     else if (!visible && map.hasLayer(labels)) map.removeLayer(labels);
   };
@@ -76,7 +77,6 @@ export const MapCanvas = memo(function MapCanvas(props: Props) {
       photos: L.layerGroup().addTo(map), // citizen-report thumbnail markers (WhatsApp photos)
       plan: L.layerGroup().addTo(map),
     };
-    map.on("zoomend", syncRoiLabels);
     setTimeout(() => map.invalidateSize(false), 0);
     return () => {
       map.remove();
@@ -107,8 +107,9 @@ export const MapCanvas = memo(function MapCanvas(props: Props) {
   }, [props.boundary]);
 
   // ---- risk-ROIs (external dataset) — toggleable standalone layer ----------
-  // Polygons live in the `rois` group; labels live in `roiLabels`, which is only
-  // attached when zoomed in (ROI_LABEL_ZOOM) so labels never clutter the overview.
+  // Polygons live in the `rois` group; each polygon's label lives in `roiLabels`
+  // and is only shown while the cursor is over that zone (mouseover/mouseout),
+  // so labels never clutter the map until the user points at a specific zone.
   useEffect(() => {
     const g = groups.current.rois;
     const gl = groups.current.roiLabels;
@@ -120,9 +121,17 @@ export const MapCanvas = memo(function MapCanvas(props: Props) {
       return;
     }
     for (const roi of props.rois) {
+      const label = L.marker([roi.lat, roi.lng], {
+        interactive: false,
+        icon: L.divIcon({
+          className: "",
+          html: `<div style="background:#fff;color:#c2333a;font:600 9.5px IBM Plex Mono,monospace;padding:2px 7px;border-radius:6px;white-space:nowrap;border:1px solid #f4cdcd;box-shadow:0 3px 9px -3px rgba(197,51,58,.4);transform:translate(-50%,-50%);">${riskLabel(roi.riskDimension)}</div>`,
+          iconSize: [0, 0],
+        }),
+      });
       try {
         L.geoJSON({ type: "Feature", geometry: roi.geojson, properties: {} } as never, {
-          interactive: false,
+          interactive: true,
           style: {
             color: "#e5484d",
             weight: 1.6,
@@ -132,18 +141,13 @@ export const MapCanvas = memo(function MapCanvas(props: Props) {
             fillColor: "#e5484d",
             fillOpacity: 0.06,
           },
-        }).addTo(g);
+        })
+          .on("mouseover", () => label.addTo(gl))
+          .on("mouseout", () => gl.removeLayer(label))
+          .addTo(g);
       } catch {
         /* ignore */
       }
-      L.marker([roi.lat, roi.lng], {
-        interactive: false,
-        icon: L.divIcon({
-          className: "",
-          html: `<div style="background:#fff;color:#c2333a;font:600 9.5px IBM Plex Mono,monospace;padding:2px 7px;border-radius:6px;white-space:nowrap;border:1px solid #f4cdcd;box-shadow:0 3px 9px -3px rgba(197,51,58,.4);transform:translate(-50%,-50%);">${riskLabel(roi.riskDimension)}</div>`,
-          iconSize: [0, 0],
-        }),
-      }).addTo(gl);
     }
     syncRoiLabels();
   }, [props.rois, props.showRois]);
