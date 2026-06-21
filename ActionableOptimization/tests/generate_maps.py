@@ -37,6 +37,7 @@ sys.path.insert(0, str(ACTION_ROOT))
 from pipeline.clustering import assign_clusters
 from pipeline.traffic import fetch_traffic_for_clusters
 from pipeline.superclustering import build_superclusters
+from pipeline import apply_budget
 from tests.visualization import map_input_points, map_clusters, map_superclusters
 
 CACHE_DIR = HERE / "cache"
@@ -44,6 +45,8 @@ MAPS_DIR = HERE / "maps"
 OUTPUTS_DIR = HERE / "outputs"
 CACHE_FILE = CACHE_DIR / "cluster_traffic_cache.csv"
 PLAYGROUND_TRAFFIC = PLAYGROUND / "cluster_traffic.csv"
+
+BUDGET = 150_000  # set to None to skip budget filtering
 
 CACHE_DIR.mkdir(exist_ok=True)
 MAPS_DIR.mkdir(exist_ok=True)
@@ -142,6 +145,15 @@ def main() -> None:
         .sort_values("total_weight", ascending=False)
         .reset_index(drop=True)
     )
+
+    # Budget selection
+    if BUDGET is not None:
+        result = apply_budget(result, BUDGET)
+        n_in    = result["within_budget"].sum()
+        sc_in   = result.loc[result["within_budget"], "supercluster_id"].nunique()
+        print(f"  Budget ${BUDGET:,.0f}: {sc_in} superclusters, {n_in} points selected")
+    else:
+        result["within_budget"] = True
 
     print("Generating step 3 outputs …")
     result.to_csv(OUTPUTS_DIR / "step_03_superclusters.csv", index=False)

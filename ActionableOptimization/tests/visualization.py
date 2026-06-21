@@ -90,27 +90,33 @@ def map_clusters(df: pd.DataFrame) -> folium.Map:
 def map_superclusters(df: pd.DataFrame) -> folium.Map:
     """
     One marker per point, coloured by supercluster_id.
+    Points outside the budget (within_budget=False) are shown in black.
     Tooltip shows supercluster-level stats.
 
     Required columns: latitude, longitude, street_name, volume,
                       cluster_id, supercluster_id, total_weight, cost.
+    Optional column:  within_budget (bool, defaults to True if absent).
     """
     m = _base_map()
 
-    # Pre-compute supercluster-level num_points for the tooltip
+    has_budget = "within_budget" in df.columns
     sc_pts = df.groupby("supercluster_id")["cluster_id"].transform("count")
 
     for (_, row), sc_count in zip(df.iterrows(), sc_pts):
-        color = _id_color(int(row["supercluster_id"]))
+        in_budget = (not has_budget) or bool(row["within_budget"])
+        color = _id_color(int(row["supercluster_id"])) if in_budget else "#000000"
+        budget_label = "within budget" if in_budget else "outside budget"
         folium.CircleMarker(
             location=[row["latitude"], row["longitude"]],
             radius=5,
             color=color,
-            fill=True, fill_color=color, fill_opacity=0.9, weight=1,
+            fill=True, fill_color=color, fill_opacity=0.9 if in_budget else 0.5,
+            weight=1,
             tooltip=folium.Tooltip(
                 f"<div style='font-size:12px'>"
                 f"<b>Street:</b> {row['street_name']}<br>"
                 f"<b>Volume:</b> {row['volume']:.4f}<br>"
+                f"<b>Budget:</b> {budget_label}<br>"
                 f"<hr style='margin:3px 0'>"
                 f"<b>Cluster:</b> {int(row['cluster_id'])}<br>"
                 f"<hr style='margin:3px 0'>"

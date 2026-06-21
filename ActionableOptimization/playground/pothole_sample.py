@@ -11,9 +11,8 @@ import geopandas as gpd
 import numpy as np
 
 def generate_street_points(
-    place=["Roma Norte, Cuauhtémoc, Mexico City, Mexico",
-     "Roma Sur, Cuauhtémoc, Mexico City, Mexico"],
-    n_points=1000,
+    place=["Mexico City, Mexico"],
+    n_points=230_000,
     seed=42
 ):
     np.random.seed(seed)
@@ -69,9 +68,7 @@ def generate_street_points(
 
 # Example
 pts = generate_street_points(
-    place=["Roma Norte, Cuauhtémoc, Mexico City, Mexico",
-     "Roma Sur, Cuauhtémoc, Mexico City, Mexico"],
-    n_points=1000
+    n_points=230_000
 )
 
 print(pts[:5])
@@ -95,7 +92,7 @@ a = (min_val - mu) / sigma
 b = (max_val - mu) / sigma
 
 # Generate sample
-n = 1000
+n = 230_000
 
 sample = truncnorm.rvs(
     a, b,
@@ -144,10 +141,10 @@ for _, row in pts.iterrows():
         tooltip=tooltip
     ).add_to(m)
 
-m.save("traffic_points.html")
+m.save("traffic_points_cdmx.html")
 m
 #%%
 
-pts.to_csv('sample_points.csv')
+pts.to_csv('sample_points_cdmx.csv')
 
 #%%

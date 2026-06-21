@@ -5,7 +5,7 @@ Usage
 -----
     from pipeline import run_pipeline
 
-    result = run_pipeline(points_df, api_key="YOUR_KEY")
+    result = run_pipeline(points_df, api_key="YOUR_KEY", budget=500_000)
 
 Input
 -----
@@ -25,6 +25,8 @@ total_weight descending, containing:
     supercluster_id
     total_weight    – sum of cluster weights in the supercluster
     cost            – 2000 + 8000 × total volume of the supercluster
+    within_budget   – True if the point's supercluster fits within the budget
+                      (always True when budget=None)
 """
 
 import pandas as pd
@@ -34,9 +36,37 @@ from .traffic import fetch_traffic_for_clusters
 from .superclustering import build_superclusters
 
 
+def _mark_within_budget(result: pd.DataFrame, budget: float) -> pd.DataFrame:
+    """
+    Add a ``within_budget`` boolean column.
+
+    Superclusters are selected greedily in descending ``total_weight`` order
+    until adding the next one would exceed *budget*.  All points belonging to
+    selected superclusters are marked True.
+    """
+    # One row per supercluster, preserving weight order (already sorted).
+    sc_costs = (
+        result[["supercluster_id", "total_weight", "cost"]]
+        .drop_duplicates("supercluster_id")
+        .sort_values("total_weight", ascending=False)
+    )
+
+    spent = 0.0
+    selected = set()
+    for _, row in sc_costs.iterrows():
+        if spent + row["cost"] <= budget:
+            spent += row["cost"]
+            selected.add(row["supercluster_id"])
+
+    result = result.copy()
+    result["within_budget"] = result["supercluster_id"].isin(selected)
+    return result
+
+
 def run_pipeline(
     points_df: pd.DataFrame,
     api_key: str,
+    budget: float = None,
     near_thresh: float = 100,
     far_thresh: float = 20,
     max_points_per_supercluster: int = 12,
@@ -52,6 +82,11 @@ def run_pipeline(
         ``street_name``, ``volume``.
     api_key:
         TomTom Traffic Flow API key.
+    budget:
+        Total repair budget in dollars.  Superclusters are selected greedily
+        in descending weight order until the budget is exhausted.  Each point
+        gets a ``within_budget`` boolean column.  Pass ``None`` to skip
+        budget filtering (all points marked ``within_budget=True``).
     near_thresh:
         Distance (m) from cluster anchor for automatic cluster inclusion.
     far_thresh:
@@ -125,6 +160,18 @@ def run_pipeline(
         .sort_values("total_weight", ascending=False)
         .reset_index(drop=True)
     )
+
+    # ── 7. Budget selection ──────────────────────────────────────────────────
+    if budget is not None:
+        result = _mark_within_budget(result, budget)
+        n_in = result["within_budget"].sum()
+        n_sc_in = result.loc[result["within_budget"], "supercluster_id"].nunique()
+        spent = result.loc[result["within_budget"], "cost"] \
+                      .groupby(result["supercluster_id"]).first().sum()
+        print(f"          Budget ${budget:,.0f}: {n_sc_in} superclusters, "
+              f"{n_in} points, ${spent:,.0f} spent\n")
+    else:
+        result["within_budget"] = True
 
     print(f"          Done. Output has {len(result)} rows.\n")
     return result
