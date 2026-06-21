@@ -78,8 +78,17 @@ export class HttpWriteApi implements WriteApi {
     const headers: Record<string, string> = {};
     if (config.writeApi.token) headers["X-Operator-Key"] = config.writeApi.token;
 
-    const res = await fetch(url, { method: "POST", body: form, headers });
-    const text = await res.text();
+    // Bound the outbound call so a slow/hanging write API doesn't tie up processing.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), config.writeApi.timeoutMs);
+    let text: string;
+    let res: Response;
+    try {
+      res = await fetch(url, { method: "POST", body: form, headers, signal: controller.signal });
+      text = await res.text();
+    } finally {
+      clearTimeout(timer);
+    }
     if (!res.ok) throw new Error(`write API ${res.status}: ${text.slice(0, 200)}`);
 
     const data = (text ? JSON.parse(text) : {}) as Record<string, unknown>;

@@ -687,6 +687,34 @@ External-data pipeline and vision/tile workers write to R2 over the S3 API. See
 - **Priority value pairing:** inherited ⇒ predecessor pointer set; computed ⇒ batch pointer set.
 - **Budget / rates nonnegative:** `budget_amount >= 0`, `unit_rate >= 0`.
 
+## Row-level security & immutability (implemented)
+
+RLS and the immutability/append-only triggers ARE in the migrations (this was
+previously documented as pending; corrected to reflect `0012`/`0300`):
+
+- **RLS enabled (with policies):**
+  - `platform.tenant_visible_observations` — `tvo_read` (`0012`): select for `authenticated`
+    where `tenant_id = active_tenant_id()` and member-viewer.
+  - `vision.observations` — `obs_read` (`0012`): select for `authenticated` gated through
+    `tenant_visible_observations` for the active tenant.
+  - `analysis.analysis_runs` — `runs_read` (member-viewer) / `runs_write` (member-author) (`0012`).
+  - `community.inference_jobs` — RLS enabled **deny-by-default, no policies** (`0300`); trusted
+    backends connect as a `BYPASSRLS`/`service_role` role, so `anon`/`authenticated` get nothing.
+- **Immutability / append-only triggers (`0012`):** `vision.observations`
+  (`enforce_observation_immutability` — immutable fact/provenance columns, set-once lifecycle
+  columns); append-only rejects on `platform.audit_events`, `analysis.run_observations`,
+  `analysis.run_observation_attributes`, `analysis.run_priority_values`,
+  `vision.observation_attribute_values`. `community.inference_jobs` has a `touch_updated_at`
+  trigger (`0300`).
+
+**Defense-in-depth gap (still recommended):** the remaining factual tables — e.g. the
+catalogs in `vision`/`priority`, `platform.tenants`/`tenant_memberships`/`oidc_subjects`,
+`geo.*`, `analysis.analysis_results` and the frozen-input tables — do **not** have RLS
+enabled and rely on absence-of-grants (service-role-only writes by convention). Adding
+deny-by-default RLS (`enable row level security` with no/explicit policies) to these would
+make the access posture explicit rather than grant-dependent. The `revoke`/`grant` hardening
+on factual tables (§11.1) is likewise not yet applied.
+
 ## Specced-but-not-yet-implemented (ongoing)
 
 The migrations build the tables, helper functions, queues, and the read-model
@@ -695,9 +723,8 @@ migration** — track them as the remaining data-model work:
 
 | Pending | Spec | Effect today |
 |---|---|---|
-| **RLS policies** — no `enable row level security`, no `create policy` anywhere | §9 | Tables are not row-secured; access control relies on service-role-only writes by convention |
-| **Immutability triggers** — `enforce_observation_immutability`, append-only `audit_events`/frozen `run_*` | §11 | Set-once / immutable columns are documented but not trigger-enforced |
 | **`revoke`/`grant`** hardening on factual tables | §11.1 | Not applied |
+| **Deny-by-default RLS on remaining factual tables** | §9 | Only the tables listed above are row-secured; the rest rely on absence-of-grants |
 | **`sweep-video`, `observation-thumbnails`, `tenant-tiles` R2 buckets** | §8 | Declared in `services/broker/wrangler.toml`; DB pointer columns reference them but no seed rows exist yet |
 | **Incremental cache maintenance** (worker adds/removes single rows on outbox events) | §5.2 | Only full `rebuild_tenant_visible()` exists |
 | **`seed.sql`** (type catalog, dev tenant, INEGI fixture, active boundary) | §13.5 | `supabase db reset` produces an empty schema |

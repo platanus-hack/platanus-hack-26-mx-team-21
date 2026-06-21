@@ -24,6 +24,22 @@ from citycrawl_api.modules.observations.store import PgObservationStore
 router = APIRouter(prefix="/v1/observations", tags=["observations"])
 logger = get_logger()
 
+# Accepted upload content types and their magic-byte signatures. We sniff the bytes (not
+# just the declared content-type, which is client-controlled) and reject mismatches.
+_ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+
+
+def _sniff_image(data: bytes) -> str | None:
+    """Return a canonical image type from the leading bytes, or None if unrecognized.
+    JPEG: FF D8 FF; PNG: 89 50 4E 47 0D 0A 1A 0A; WEBP: 'RIFF'....'WEBP'."""
+    if data[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
 
 def _parse_dt(value: str) -> datetime:
     try:
@@ -48,9 +64,31 @@ async def create_citizen_observation(
     if not settings.db_url:
         raise ApiError(503, "db_unconfigured", "Database is not configured")
 
+    # (a) Declared content-type must be in the allowlist.
+    if (image.content_type or "").split(";")[0].strip().lower() not in _ALLOWED_IMAGE_TYPES:
+        raise ApiError(
+            400, "unsupported_image_type",
+            "Image must be JPEG, PNG, or WebP",
+        )
+
     data = await image.read()
+    # (c) Reject empty payloads.
     if not data:
         raise ApiError(400, "empty_image", "Image payload is empty")
+    # Content-Length can be absent or spoofed, so re-check the real byte count.
+    if len(data) > settings.max_upload_bytes:
+        raise ApiError(
+            413, "payload_too_large",
+            "Image exceeds the maximum allowed size",
+            {"maxBytes": settings.max_upload_bytes},
+        )
+    # (b) Magic-byte sniff: the actual bytes must be a real image and match the allowlist.
+    sniffed = _sniff_image(data)
+    if sniffed is None:
+        raise ApiError(
+            400, "invalid_image",
+            "Uploaded bytes are not a valid JPEG, PNG, or WebP image",
+        )
 
     observation_id = uuid.uuid4()
     store, bucket = make_thumbnail_store(settings)

@@ -6,25 +6,34 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
+# Bounds on client-supplied input. These cap the system-prompt size (denial-of-wallet:
+# every parse spends Anthropic budget) and bound how much untrusted text gets interpolated
+# into the prompt. The anthropic adapter applies stricter per-field validation on top.
+MAX_PROMPT_CHARS = 4000
+MAX_CHOICES = 200
+MAX_LABEL_CHARS = 80
+MAX_SLUG_CHARS = 40
+MAX_CVE_CHARS = 16
+
 
 class _Camel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 class IssueTypeChoice(_Camel):
-    slug: str
-    label: str
+    slug: str = Field(min_length=1, max_length=MAX_SLUG_CHARS)
+    label: str = Field(min_length=1, max_length=MAX_LABEL_CHARS)
 
 
 class RegionChoice(_Camel):
-    cve: str
-    name: str
+    cve: str = Field(min_length=1, max_length=MAX_CVE_CHARS)
+    name: str = Field(min_length=1, max_length=MAX_LABEL_CHARS)
 
 
 class DraftParseRequest(_Camel):
-    prompt: str
-    issue_types: list[IssueTypeChoice] = []
-    regions: list[RegionChoice] = []
+    prompt: str = Field(min_length=1, max_length=MAX_PROMPT_CHARS)
+    issue_types: list[IssueTypeChoice] = Field(default=[], max_length=MAX_CHOICES)
+    regions: list[RegionChoice] = Field(default=[], max_length=MAX_CHOICES)
 
 
 class PlanDraft(_Camel):

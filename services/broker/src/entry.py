@@ -17,6 +17,24 @@ def _json_opts(method, headers, body):
     return to_js({"method": method, "headers": headers, "body": body},
                  dict_converter=Object.fromEntries)
 
+def _valid_path(path):
+    # Canonicalize what the broker treats as an R2 key BEFORE authz/fetch, so the
+    # SQL split_part view of the path in app_authorize_object cannot diverge from
+    # the actual key handed to binding.get(). R2 keys are flat (no real traversal),
+    # but un-canonicalized paths could otherwise authorize one key and fetch another.
+    # Reject: empty, leading "/", any ".." segment, "//" (empty segments),
+    # backslashes, and control chars / NUL. Returns True only for a clean key.
+    if not path or path[0] == "/":
+        return False
+    if ".." in path.split("/"):
+        return False
+    if "//" in path or "\\" in path:
+        return False
+    for ch in path:
+        if ord(ch) < 0x20 or ord(ch) == 0x7f:
+            return False
+    return True
+
 async def _authorized(env, bearer, bucket, path):
     url = f"{env.SUPABASE_URL}/rest/v1/rpc/app_authorize_object"
     headers = {"apikey": env.SUPABASE_ANON_KEY, "Authorization": bearer,
@@ -25,8 +43,16 @@ async def _authorized(env, bearer, bucket, path):
     resp = await fetch(url, _json_opts("POST", headers, body))
     if not resp.ok:
         return False
-    text = (await resp.text()).strip()
-    return text == "true"
+    # Contract: app_authorize_object RETURNS boolean. PostgREST serializes a scalar
+    # RPC result as bare JSON, so the response body is exactly `true` or `false`.
+    # Fail closed: allow ONLY when the parsed JSON is the boolean `true` itself.
+    # Any other shape (JSON `[true]`, "true" string, 1, null), whitespace quirks,
+    # or a parse error must DENY rather than risk silently flipping allow/deny.
+    text = await resp.text()
+    try:
+        return json.loads(text) is True
+    except (ValueError, TypeError):
+        return False
 
 async def on_fetch(request, env):
     u = URL.new(request.url)
@@ -36,6 +62,9 @@ async def on_fetch(request, env):
     bucket = u.searchParams.get("bucket")
     path = u.searchParams.get("path")
     if bucket not in BINDINGS or not path:
+        return Response.new("Bad request", status=400)
+    if not _valid_path(path):
+        # Reject un-canonicalized paths before authz/fetch (see _valid_path).
         return Response.new("Bad request", status=400)
 
     bearer = request.headers.get("Authorization")

@@ -30,6 +30,7 @@ export interface Config {
     mode: WriteApiMode;
     baseUrl: string;
     token: string;
+    timeoutMs: number;
   };
   media: {
     maxBytes: number;
@@ -37,6 +38,9 @@ export interface Config {
   };
   defaultObservationType: string;
   sessionTtlMs: number;
+  maxSessions: number;
+  maxDedupe: number;
+  maxSubmitAttempts: number;
 }
 
 export const config: Config = {
@@ -57,6 +61,7 @@ export const config: Config = {
     mode: (process.env.WRITE_API_MODE as WriteApiMode) === "http" ? "http" : "dry-run",
     baseUrl: process.env.WRITE_API_BASE_URL ?? "",
     token: process.env.WRITE_API_TOKEN ?? "",
+    timeoutMs: int(process.env.WRITE_API_TIMEOUT_MS, 20_000),
   },
   media: {
     maxBytes: int(process.env.MAX_MEDIA_BYTES, 16 * 1024 * 1024),
@@ -64,6 +69,9 @@ export const config: Config = {
   },
   defaultObservationType: process.env.DEFAULT_OBSERVATION_TYPE ?? "pothole",
   sessionTtlMs: int(process.env.SESSION_TTL_MINUTES, 15) * 60_000,
+  maxSessions: int(process.env.MAX_SESSIONS, 10_000),
+  maxDedupe: int(process.env.MAX_DEDUPE, 50_000),
+  maxSubmitAttempts: int(process.env.MAX_SUBMIT_ATTEMPTS, 5),
 };
 
 /** Returns a list of human-readable config problems (empty when healthy). */
@@ -82,5 +90,9 @@ export function validateConfig(): string[] {
   }
   if (config.media.maxBytes <= 0) problems.push("MAX_MEDIA_BYTES must be a positive integer");
   if (config.media.fetchTimeoutMs <= 0) problems.push("MEDIA_FETCH_TIMEOUT_MS must be a positive integer");
+  if (config.writeApi.timeoutMs <= 0) problems.push("WRITE_API_TIMEOUT_MS must be a positive integer");
+  if (config.maxSessions <= 0) problems.push("MAX_SESSIONS must be a positive integer");
+  if (config.maxDedupe <= 0) problems.push("MAX_DEDUPE must be a positive integer");
+  if (config.maxSubmitAttempts <= 0) problems.push("MAX_SUBMIT_ATTEMPTS must be a positive integer");
   return problems;
 }
