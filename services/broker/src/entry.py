@@ -48,11 +48,30 @@ async def on_fetch(request, env):
     binding = getattr(env, BINDINGS[bucket])
     rng = request.headers.get("Range")
     if rng and rng.startswith("bytes="):
-        start_s, _, end_s = rng[len("bytes="):].partition("-")
-        offset = int(start_s) if start_s else 0
-        opts = {"range": {"offset": offset}} if not end_s else \
-               {"range": {"offset": offset, "length": int(end_s) - offset + 1}}
-        obj = await binding.get(path, to_js(opts, dict_converter=Object.fromEntries))
+        # Parse a single byte range; fail closed to 416 on anything malformed.
+        spec = rng[len("bytes="):].split(",")[0].strip()
+        start_s, _, end_s = spec.partition("-")
+        try:
+            if start_s == "":
+                suffix = int(end_s)            # bytes=-N  -> last N bytes
+                if suffix <= 0:
+                    raise ValueError
+                ropts = {"range": {"suffix": suffix}}
+            else:
+                offset = int(start_s)          # bytes=A-  or  bytes=A-B
+                if offset < 0:
+                    raise ValueError
+                if end_s == "":
+                    ropts = {"range": {"offset": offset}}
+                else:
+                    end = int(end_s)
+                    if end < offset:
+                        raise ValueError
+                    ropts = {"range": {"offset": offset, "length": end - offset + 1}}
+        except ValueError:
+            return Response.new("Range Not Satisfiable",
+                                to_js({"status": 416}, dict_converter=Object.fromEntries))
+        obj = await binding.get(path, to_js(ropts, dict_converter=Object.fromEntries))
         if obj is None:
             return Response.new("Not found", status=404)
         out = Headers.new()
@@ -60,8 +79,12 @@ async def on_fetch(request, env):
         out.set("Accept-Ranges", "bytes")
         out.set("Cache-Control", "private, max-age=60")
         total = obj.size
-        last = max(offset, offset + (obj.range.length if hasattr(obj.range, "length") else total - offset) - 1)
-        out.set("Content-Range", f"bytes {offset}-{last}/{total}")
+        # Derive the actually-served window from R2's resolved range (covers suffix too).
+        r = obj.range
+        rstart = int(r.offset) if hasattr(r, "offset") and r.offset is not None else 0
+        rlen = int(r.length) if hasattr(r, "length") and r.length is not None else (total - rstart)
+        last = max(rstart, rstart + rlen - 1)
+        out.set("Content-Range", f"bytes {rstart}-{last}/{total}")
         return Response.new(obj.body, to_js({"status": 206, "headers": out},
                                             dict_converter=Object.fromEntries))
     else:
