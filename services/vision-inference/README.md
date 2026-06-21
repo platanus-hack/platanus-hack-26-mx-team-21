@@ -54,7 +54,8 @@ tests/       # smoke tests (schema validation, r2 url parsing) — no network/GP
 pipeline/    # offline GPU pipeline (detector + render): potholes seg, perspective grid,
              # dynamic anomaly captions, GPS-georeferenced GeoJSON (needs model weights)
 ops/         # vLLM launch + Triton(vLLM-backend) scaffold for the unified-server option
-docs/        # PLAN.md (architecture, stages, RAG), vllm_perf_analysis.md (perf/experiments), prompts.md
+docs/        # PLAN.md (architecture, stages, RAG), architecture_justification.md (vLLM+Triton+gRPC,
+             # presentation), vllm_perf_analysis.md (perf/experiments), prompts.md
 ```
 
 ## Modes (latency vs detail)
