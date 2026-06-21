@@ -58,7 +58,11 @@ consumes/produces* — not how it's built.
 
 ### 2. Storage
 - Receives and stores **raw video plus capture metadata** (location, time,
-  route/platform).
+  route/platform) in **Cloudflare R2** private buckets (`sweep-video`,
+  `observation-thumbnails`, `tenant-tiles`, `external-data`).
+- Protected media and tiles are served through a **Cloudflare Worker broker**
+  (`r2-access-broker`) that validates the caller's Supabase JWT via a Postgres
+  RPC before streaming bytes from R2. No Supabase Storage or signed URLs are used.
 - Serves as the source of truth that downstream offline processing reads from.
 
 ### 3. Issue Detection (Vision)
@@ -92,7 +96,8 @@ consumes/produces* — not how it's built.
 Cameras (routes / trash trucks)
         │  geolocalised, discretised, timestamped video (streamed)
         ▼
-     Storage  ──────────────────────────────────────────────┐
+  Cloudflare R2  ────────────────────────────────────────────┐
+  (+ access broker)
         │                                                     │
         │ video + capture metadata                            │
         ▼                                                     │

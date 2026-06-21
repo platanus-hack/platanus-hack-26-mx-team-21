@@ -24,15 +24,21 @@ external-data extract --source ssc_hechos_transito     # → .data/raw + .data/s
 external-data roi-compute --dimension crash            # → .data/staging/rois/current.geojson
 ```
 
-## Run (Supabase)
-Apply migrations `0101–0103` (Supabase MCP or CLI), then:
+## Run (Cloudflare R2 — production / Container)
+Object storage is on Cloudflare R2 (`STORAGE_BACKEND=r2`). In production the pipeline
+runs as the container image (`Dockerfile`) invoked by the Cron worker (`cron/`); see
+`docs/runbooks/r2-cutover.md` and `supabase/STORAGE.md`. Apply migrations `0101–0103`
+(Supabase MCP or CLI) for the DB side, then:
 ```bash
-export STORAGE_BACKEND=supabase DB_URL=... \
-       SUPABASE_S3_ENDPOINT=... SUPABASE_S3_ACCESS_KEY=... SUPABASE_S3_SECRET=...
-external-data extract --all      # raw+staging → external-data bucket
+export STORAGE_BACKEND=r2 DB_URL=... \
+       R2_S3_ENDPOINT=https://<account_id>.r2.cloudflarestorage.com \
+       R2_ACCESS_KEY=... R2_SECRET=...
+external-data extract --all      # raw+staging → R2 external-data bucket
 external-data load-db            # staged signals → priority.external_signals
 external-data roi-compute --all  # → priority.roi_runs + priority.rois
 ```
+> `STORAGE_BACKEND=supabase` (with `SUPABASE_S3_*`) is retained only as the migration
+> rollback path until Supabase Storage is decommissioned (`0211`).
 
 ## Sources (registry/sources.yaml)
 9 sources across 5 toggleable risk dimensions: `crash` (SSC, C5, news), `crime` (FGJ
@@ -47,3 +53,25 @@ carpetas+víctimas), `flooding` (SACMEX, 0311-agua), `road_surface` (0311-baches
 - Column names verified live for **SSC only**; FGJ/C5/0311/SACMEX/infracciones headers must
   be confirmed against each live CSV before their first real extract.
 - `external-data` bucket created but empty (no raw/staging uploaded yet).
+
+## Container deployment (R2 + Cron)
+
+Deploy the containerized pipeline to Cloudflare Containers with a daily Cron trigger:
+
+```bash
+# From services/external-data/cron/
+npx wrangler deploy
+
+# Set R2 + DB credentials (one-time):
+npx wrangler secret put R2_S3_ENDPOINT
+npx wrangler secret put R2_ACCESS_KEY
+npx wrangler secret put R2_SECRET
+npx wrangler secret put DB_URL
+npx wrangler secret put EXTERNAL_DATA_BUCKET  # e.g. "external-data"
+```
+
+The Dockerfile defines the image: `external-data:r2` with `STORAGE_BACKEND=r2`, entrypoint `external-data` CLI.
+The `wrangler.toml` in `cron/` configures the Cron Worker (`0 6 * * *` = daily 06:00 UTC) and Durable Object container.
+
+On each cron trigger, the container runs: `external-data extract && external-data roi-compute --export && external-data load`.
+All raw/staging/ROI output writes to R2 via the s3fs backend.

@@ -90,7 +90,7 @@ flowchart LR
 | Domain | Owns | May reference |
 |---|---|---|
 | `platform` | Tenants, OIDC subjects, memberships, audit events | Analysis and geography targets by stable identifier |
-| `vision` | Sources, sweeps, type catalog, observations, factual values | Media handles owned outside this model |
+| `vision` | Sources, sweeps, type catalog, observations, factual values | Media object handles (bucket + path pointers to Cloudflare R2; bytes served by the broker Worker via `app_authorize_object`) |
 | `priority` | Models, work batches, immutable values, current pointers | Vision observations and sweeps |
 | `geo` | INEGI editions and areas, tenant boundaries, observation bindings | Platform tenants and vision observations |
 | `analysis` | Providers, definitions, runs, frozen inputs, attempts, results, artifacts | Every upstream domain through pinned records |
@@ -956,7 +956,7 @@ Each stage must preserve domain ownership and expose stable identifiers to the n
 
 - SQL DDL, migration organization, indexes, database roles, and row-level-security syntax.
 - Choice of backend framework, ORM, queue, or provider transport.
-- Vision inference and media-byte storage.
+- Vision inference. Media-byte storage is on Cloudflare R2 (private buckets `sweep-video`, `observation-thumbnails`, `tenant-tiles`, `external-data`), managed as IaC in `services/broker/wrangler.toml` and accessed via the broker Worker (`app_authorize_object` RPC). Live contract: `supabase/STORAGE.md`.
 - Supersession and sweep-overlap algorithm implementation beyond the stated invariants.
 - Priority calculation logic and model design.
 - Instance costing, budget allocation, clustering, routing, and other provider algorithms.

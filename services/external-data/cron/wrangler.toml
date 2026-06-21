@@ -1,0 +1,11 @@
+name = "external-data-cron"
+main = "src/scheduler.py"          # thin Worker that invokes the Container
+compatibility_date = "2025-06-01"
+compatibility_flags = ["python_workers"]
+
+[triggers]
+crons = ["0 6 * * *"]              # daily 06:00 UTC
+
+[[containers]]
+class_name = "PipelineRunner"      # Durable Object that owns the container instance
+image = "../Dockerfile"

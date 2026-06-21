@@ -12,7 +12,7 @@ This spec defines **one thing**: the contract for the *final output of the visio
 
 Explicitly **out of scope** (owned by other modules):
 
-- Video / object storage. Observations only carry a **reference handle** (`recording_id`, `frame_ref`) back to the source frame; the bytes live elsewhere.
+- Video / object storage. Observations only carry a **reference handle** (`recording_id`, `frame_ref`) back to the source frame; the bytes live in Cloudflare R2 and are accessed via the broker service (see `supabase/STORAGE.md`).
 - The vision / VLM models themselves. We assume a generic producer that emits observations.
 - Any **inference / derived data** — confidence, severity, priority. Those are **enrichments** other modules add, keyed on `observation.id`.
 
@@ -251,7 +251,13 @@ SELECT * FROM current_observations;
 SELECT * FROM observations
  WHERE valid_from <= :t AND (valid_to IS NULL OR valid_to > :t);
 
--- EVIDENCE: hand (recording_id, frame_ref, image_bbox) to the storage module.
+-- EVIDENCE: hand (recording_id, frame_ref, image_bbox) to the media-access layer.
+--   The client requests GET /api/r2/object?bucket=sweep-video&path=sweeps/{sweep_id}/{recording_id}.mp4
+--   (broker at https://r2-access-broker.alamst.workers.dev) with its Supabase JWT.
+--   The broker calls app_authorize_object(bucket, path) and, on allow, streams bytes from R2
+--   (Range header → 206 for seeking). media_offset_ms from frame_ref is applied client-side
+--   or via a Range byte-offset to jump the video to the exact detection frame.
+--   NO Supabase signed URLs. See supabase/STORAGE.md for the full storage contract.
 ```
 
 ### 5.3 Review layer (out of ingest)

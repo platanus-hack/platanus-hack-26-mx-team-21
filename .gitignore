@@ -149,6 +149,7 @@ activemq-data/
 
 # Environments
 .env
+.cloudflare.env
 .envrc
 .venv
 env/
@@ -218,3 +219,5 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+.dev.vars
+.wrangler/

@@ -39,5 +39,16 @@ def make_store(settings: Settings) -> ObjectStore:
             client_kwargs={"endpoint_url": settings.supabase_s3_endpoint},
         )
         return ObjectStore(fs, settings.external_data_bucket)
+    if settings.storage_backend == "r2":
+        if not settings.r2_s3_endpoint:
+            # Without an explicit R2 endpoint, fsspec would silently target AWS S3.
+            raise ValueError("r2_s3_endpoint must be set when storage_backend='r2'")
+        fs = fsspec.filesystem(
+            "s3",
+            key=settings.r2_access_key,
+            secret=settings.r2_secret,
+            client_kwargs={"endpoint_url": settings.r2_s3_endpoint},
+        )
+        return ObjectStore(fs, settings.external_data_bucket)
     fs = fsspec.filesystem("file")
     return ObjectStore(fs, settings.local_root)

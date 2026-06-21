@@ -1,0 +1,50 @@
+/* CityCrawl design tokens — extracted from the reference design.
+   Single source of truth. shadcn theme variables (index.css) map onto these. */
+:root {
+  /* Brand (shadcn --color-primary) */
+  --brand: #2f64e6;
+  --brand-soft: #eaf0ff;
+  --brand-line: #d9e4ff;
+
+  /* Violet — agent / analysis accent */
+  --violet: #7c3aed;
+  --violet-soft: #f6f1ff;
+  --violet-line: #e7daff;
+
+  /* Ink ramp (text) */
+  --ink: #1b2430;
+  --ink-2: #5b6675;
+  --muted-ink: #8a94a3;
+  --muted-ink-2: #9aa3b1;
+
+  /* Surfaces */
+  --bg: #eef1f5;
+  --card: #ffffff;
+  --surface-1: #f7f9fc;
+  --surface-2: #f3f5f8;
+
+  /* Borders */
+  --line: #e3e7ee;
+  --line-2: #e6e9ee;
+  --line-strong: #cdd4de;
+
+  /* Status — success */
+  --success: #30a46c;
+  --success-ink: #1d7a4d;
+  --success-soft: #e7f6ec;
+  --success-line: #cdecd8;
+  /* Status — danger */
+  --danger: #e5484d;
+  --danger-soft: #fdeceb;
+  --danger-line: #f8d8d6;
+  /* Status — warning */
+  --warning: #f5a623;
+  --warning-soft: #fff6e0;
+
+  /* Type */
+  --font-display: "Public Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+
+  /* Radius base (scale derived in index.css @theme) */
+  --radius: 9px;
+}
