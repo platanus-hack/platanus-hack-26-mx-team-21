@@ -1,0 +1,43 @@
+syntax = "proto3";
+package anomaly;
+
+// Real-time road-anomaly cascade service.
+service AnomalyService {
+  // Bidirectional stream: client pushes frames; server returns detector results
+  // immediately and VLM verdicts on later messages (tagged by frame_id/event_id).
+  rpc AnalyzeStream(stream Frame) returns (stream FrameResult);
+  // Unary single-image convenience (runs detector, and VLM synchronously if asked).
+  rpc Analyze(Frame) returns (FrameResult);
+}
+
+message Frame {
+  bytes  image_jpeg = 1;   // JPEG-encoded frame
+  int64  frame_id   = 2;
+  double timestamp  = 3;
+  double lat        = 4;    // optional geo
+  double lon        = 5;
+  bool   want_vlm   = 6;    // unary only: force synchronous VLM
+}
+
+message Detection {
+  string label    = 1;     // detector class, e.g. "pothole"
+  float  score    = 2;
+  float  x1 = 3; float y1 = 4; float x2 = 5; float y2 = 6;
+  bool   on_floor = 7;     // passed the road/floor mask gate
+  float  road_overlap = 8;
+}
+
+message FrameResult {
+  int64  frame_id        = 1;
+  repeated Detection detections = 2;   // detector output (always present)
+  // VLM verdict (present only on messages where the VLM ran; may arrive later):
+  bool   vlm_ran         = 3;
+  string final_label     = 4;          // "POTHOLE" | "ANOMALY" | "" (detector-only)
+  bool   pothole_present  = 5;
+  string vlm_comment     = 6;          // what the VLM saw / caption
+  string event_id        = 7;          // dedup event this frame belongs to
+  double detector_ms     = 8;
+  double vlm_ms          = 9;
+  double lat            = 10;
+  double lon            = 11;
+}

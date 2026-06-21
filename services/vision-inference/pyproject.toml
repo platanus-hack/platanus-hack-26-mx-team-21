@@ -1,0 +1,32 @@
+[project]
+name = "vision-inference"
+version = "0.1.0"
+description = "Vision/VLM inference service: detect & describe urban anomalies (potholes, trash, lighting, vendors) from R2 images; consumes community.inference_jobs."
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi",
+  "uvicorn[standard]",
+  "httpx",
+  "pydantic>=2",
+  "boto3",        # Cloudflare R2 (S3)
+  "supabase",     # jobs table + realtime
+]
+
+[project.optional-dependencies]
+# pipeline (offline video/detector) — heavy, GPU box only:
+pipeline = ["ultralytics", "transformers", "opencv-python-headless", "pillow", "numpy"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+vision-worker = "vision_inference.worker:main"        # Stage 2 poller
+vision-jobs = "vision_inference.query_jobs:main"      # read-only job queries
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
