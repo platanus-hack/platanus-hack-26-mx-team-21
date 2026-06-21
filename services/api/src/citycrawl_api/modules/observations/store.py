@@ -132,20 +132,30 @@ class PgObservationStore:
                     (observation_id,),
                 )
 
-                # 8. Make it appear on the map (full rebuild; fine at this scale).
+                # 8. Make it appear on the map — INCREMENTALLY. Clip only THIS point
+                #    against the tenant's active boundary and insert a single row.
+                #    (The old `platform.rebuild_tenant_visible` re-clipped every
+                #    observation on each insert — O(all observations), ~90s and worker-
+                #    blocking once the set grew to ~180k. This is O(1).)
                 in_boundary = False
                 if tenant_id is not None:
-                    cur.execute("select platform.rebuild_tenant_visible(%s)", (tenant_id,))
                     cur.execute(
                         """
-                        select exists(
-                            select 1 from platform.tenant_visible_observations
-                            where tenant_id = %s and observation_id = %s
-                        )
+                        insert into platform.tenant_visible_observations
+                            (tenant_id, boundary_version_id, observation_id, data_version)
+                        select b.tenant_id, b.id, %s,
+                               coalesce((select data_version from vision.read_model_state), 0)
+                          from geo.tenant_boundary_versions b
+                         where b.tenant_id = %s and b.status = 'active'
+                           and ST_Contains(
+                                 b.materialized_geometry,
+                                 ST_SetSRID(ST_MakePoint(%s, %s), 4326))
+                        on conflict (tenant_id, observation_id) do nothing
+                        returning observation_id
                         """,
-                        (tenant_id, observation_id),
+                        (observation_id, tenant_id, lng, lat),
                     )
-                    in_boundary = bool(cur.fetchone()[0])
+                    in_boundary = cur.fetchone() is not None
             conn.commit()
 
         return {
