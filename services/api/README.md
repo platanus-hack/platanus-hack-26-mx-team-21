@@ -91,7 +91,7 @@ fly secrets set \
   ANTHROPIC_API_KEY=... \
   ANTHROPIC_MODEL=claude-haiku-4-5-20251001 \
   OPERATOR_API_KEY=... \
-  ALLOWED_ORIGINS=https://<frontend-host> \
+  ALLOWED_ORIGINS="https://citycrawl.dev,https://www.citycrawl.dev,https://citycrawl.pages.dev,http://localhost:5173,http://127.0.0.1:5173" \
   STORAGE_BACKEND=r2 \
   R2_S3_ENDPOINT=https://<account_id>.r2.cloudflarestorage.com \
   R2_ACCESS_KEY=... R2_SECRET=... EXTERNAL_DATA_BUCKET=external-data \
@@ -101,6 +101,19 @@ fly deploy
 fly status
 curl -s https://citycrawl-api.fly.dev/health/live
 ```
+
+> ⚠️ **CORS.** `ALLOWED_ORIGINS` is an **exact-match** allowlist (Starlette
+> `CORSMiddleware`, no wildcards). It must contain **every** browser origin the frontend
+> loads from. The Pages site is reachable at both `citycrawl.pages.dev` **and**
+> `citycrawl.dev`, so both must be listed — otherwise the preflight returns 400 with no
+> `access-control-allow-origin` and the browser fails with "Failed to fetch". Verify:
+> ```bash
+> curl -s -i -X OPTIONS https://citycrawl-api.fly.dev/v1/planning/optimize \
+>   -H "Origin: https://citycrawl.pages.dev" \
+>   -H "Access-Control-Request-Method: POST" \
+>   -H "Access-Control-Request-Headers: authorization,content-type" \
+>   | grep -i "^HTTP\|access-control-allow-origin"
+> ```
 
 ### Secret rotation
 

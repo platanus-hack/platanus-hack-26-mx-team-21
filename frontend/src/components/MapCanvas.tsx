@@ -14,7 +14,6 @@ interface Props {
   rois: Roi[];
   selectedId: string | null;
   accent: string;
-  dockOpen: boolean;
   panTarget: { lat: number; lng: number; n: number } | null;
   onSelect: (id: string) => void;
 }

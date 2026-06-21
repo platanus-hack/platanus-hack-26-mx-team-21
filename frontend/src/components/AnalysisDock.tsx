@@ -44,34 +44,39 @@ export function AnalysisDock(props: Props) {
   const [pop, setPop] = useState<"region" | "cost" | null>(null);
   const togglePop = (p: "region" | "cost") => setPop((cur) => (cur === p ? null : p));
 
-  // Cross-fade between launcher and full dock. Both stay mounted for the duration of
-  // the transition so there's never an empty frame (no flash). `anim` drives which
-  // keyframe the dock plays; once it clears, only one of the two is rendered.
-  const [anim, setAnim] = useState<"in" | "out" | null>(null);
-  const prevOpen = useRef(props.open);
   useEffect(() => {
-    if (prevOpen.current === props.open) return;
-    prevOpen.current = props.open;
-    setPop(null);
-    setAnim(props.open ? "in" : "out");
-    const t = setTimeout(() => setAnim(null), 200);
-    return () => clearTimeout(t);
+    if (!props.open) setPop(null);
   }, [props.open]);
 
-  const showDock = props.open || anim === "out";
-  const showLauncher = !props.open || anim === "in";
+  // Collapse/expand by animating the BODY's height; the header stays as the bar.
+  // height:auto can't be transitioned, so we go auto → fixed px → 0 (and back).
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [bodyH, setBodyH] = useState<number | "auto">(props.open ? "auto" : 0);
+  const first = useRef(true);
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    if (props.open) {
+      setBodyH(el.scrollHeight);
+      const t = setTimeout(() => setBodyH("auto"), 210); // settle to auto so content can reflow
+      return () => clearTimeout(t);
+    }
+    setBodyH(el.scrollHeight); // pin current px height, then collapse to 0 next frame
+    const r = requestAnimationFrame(() => requestAnimationFrame(() => setBodyH(0)));
+    return () => cancelAnimationFrame(r);
+  }, [props.open]);
 
-  // Report the dock's rendered height so sibling panels can sit a consistent gap above it.
-  const dockRef = useRef<HTMLDivElement>(null);
+  // Report the expanded card height (once settled) so the layers panel keeps a steady gap.
+  const cardRef = useRef<HTMLDivElement>(null);
   const onHeight = props.onHeight;
   useEffect(() => {
-    const el = dockRef.current;
-    if (!el || !onHeight) return;
-    onHeight(el.offsetHeight);
-    const ro = new ResizeObserver(() => onHeight(el.offsetHeight));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [onHeight, showDock]);
+    const el = cardRef.current;
+    if (el && onHeight && props.open && bodyH === "auto") onHeight(el.offsetHeight);
+  }, [onHeight, props.open, bodyH, props.pointCount, props.budget, props.squadOverride, props.regionFilter]);
 
   const regionLabel =
     props.regionFilter.length === 0
@@ -81,64 +86,35 @@ export function AnalysisDock(props: Props) {
   const auto = props.squadOverride == null;
 
   return (
-    <>
-      {/* collapsed → header-only bar; sits behind the dock so it's revealed/covered cleanly */}
-      {showLauncher && (
-        <button
-          onClick={props.onToggleOpen}
-          title="Abrir análisis"
-          // drop the blur while the dock animates over it — re-blurring the revealed
-          // strip every frame is pure cost; the frosted look returns once at rest.
-          style={anim ? { ...launcher, backdropFilter: "none", WebkitBackdropFilter: "none" } : launcher}
-        >
-          <span style={{ ...launcherDot, background: "var(--acc,#2f64e6)" }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-              <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </span>
-          <span style={{ fontWeight: 800, letterSpacing: "-.2px" }}>Análisis</span>
-          <span style={launcherMeta}>{props.pointCount} pts · {money(props.budget)}</span>
-          <span style={{ marginLeft: "auto", display: "flex" }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <path d="M6 15l6-6 6 6" stroke="#8a94a3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </span>
-        </button>
-      )}
-
-      {showDock && (
     <div
-      ref={dockRef}
+      ref={cardRef}
       style={{
         position: "absolute",
         left: 18,
         right: 404,
         bottom: 18,
         zIndex: 521,
-        background: "rgba(255,255,255,.96)",
-        // backdrop-filter is dropped mid-animation: re-blurring every frame is what made
-        // the open/close janky, and the bg is ~opaque so the difference is imperceptible.
-        backdropFilter: anim ? "none" : "blur(16px)",
-        WebkitBackdropFilter: anim ? "none" : "blur(16px)",
+        // Solid background (no backdrop-filter): blurring the whole map region behind the
+        // panel was the dominant paint cost and scaled badly on Retina/slower GPUs.
+        background: "#fff",
         border: "1px solid rgba(230,233,238,.95)",
         borderRadius: 16,
         boxShadow: "0 28px 70px -34px rgba(20,30,50,.55)",
         display: "flex",
         flexDirection: "column",
         overflow: "visible",
-        willChange: anim ? "transform, opacity" : undefined,
-        animation: anim === "out" ? "ppdown .2s ease forwards" : anim === "in" ? "ppup .2s ease" : undefined,
-        pointerEvents: anim === "out" ? "none" : "auto",
       }}
     >
-      {/* header */}
+      {/* header — always visible; doubles as the collapsed bar and the toggle */}
       <div
+        onClick={props.onToggleOpen}
         style={{
           padding: "11px 14px",
           display: "flex",
           alignItems: "center",
           gap: 11,
-          borderBottom: "1px solid #eef0f4",
+          borderBottom: props.open ? "1px solid #eef0f4" : "1px solid transparent",
+          cursor: "pointer",
         }}
       >
         <div
@@ -181,7 +157,14 @@ export function AnalysisDock(props: Props) {
           </div>
         </div>
         {props.hasHistory && (
-          <button onClick={props.onToggleHistory} title="Planes anteriores" style={iconBtn}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onToggleHistory();
+            }}
+            title="Planes anteriores"
+            style={iconBtn}
+          >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
               <path
                 d="M12 8v4l3 2"
@@ -200,12 +183,29 @@ export function AnalysisDock(props: Props) {
             </svg>
           </button>
         )}
-        <button onClick={props.onToggleOpen} title="Ocultar panel" style={iconBtn}>
+        <span
+          title={props.open ? "Ocultar panel" : "Abrir panel"}
+          style={{
+            ...iconBtn,
+            transform: props.open ? "rotate(0deg)" : "rotate(180deg)",
+            transition: "transform .2s ease",
+          }}
+        >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
             <path d="M6 9l6 6 6-6" stroke="#8a94a3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-        </button>
+        </span>
       </div>
+
+      {/* collapsible body — height animates between 0 and content height */}
+      <div
+        ref={bodyRef}
+        style={{
+          height: bodyH === "auto" ? "auto" : bodyH,
+          overflow: bodyH === "auto" ? "visible" : "hidden",
+          transition: "height .2s ease",
+        }}
+      >
 
       {/* issue-type selector */}
       <div
@@ -565,9 +565,8 @@ export function AnalysisDock(props: Props) {
           </Popover>
         )}
       </div>
+      </div>
     </div>
-      )}
-    </>
   );
 }
 
@@ -644,46 +643,6 @@ const popClear: React.CSSProperties = {
   fontSize: 11,
   fontWeight: 700,
   cursor: "pointer",
-};
-
-const launcher: React.CSSProperties = {
-  position: "absolute",
-  left: 18,
-  right: 404,
-  bottom: 18,
-  zIndex: 520,
-  display: "flex",
-  alignItems: "center",
-  gap: 11,
-  background: "rgba(255,255,255,.96)",
-  backdropFilter: "blur(16px)",
-  WebkitBackdropFilter: "blur(16px)",
-  border: "1px solid rgba(230,233,238,.95)",
-  borderRadius: 16,
-  boxShadow: "0 28px 70px -34px rgba(20,30,50,.55)",
-  height: 52,
-  padding: "0 14px 0 11px",
-  fontFamily: "Public Sans, sans-serif",
-  fontSize: 13.5,
-  fontWeight: 700,
-  color: "#1b2430",
-  cursor: "pointer",
-  textAlign: "left",
-};
-const launcherDot: React.CSSProperties = {
-  width: 30,
-  height: 30,
-  borderRadius: 9,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  flex: "none",
-};
-const launcherMeta: React.CSSProperties = {
-  fontFamily: "IBM Plex Mono, monospace",
-  fontSize: 10,
-  fontWeight: 500,
-  color: "#9aa3b1",
 };
 
 function pillBtn(active: boolean): React.CSSProperties {

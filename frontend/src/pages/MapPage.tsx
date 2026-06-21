@@ -376,7 +376,6 @@ export function MapPage() {
         rois={rois}
         selectedId={selectedId}
         accent={accent}
-        dockOpen={dockOpen}
         panTarget={panTarget}
         onSelect={onSelect}
       />
