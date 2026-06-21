@@ -3,6 +3,11 @@ import type { PlanResult } from "../lib/types";
 import { typeUnit } from "../lib/types";
 import { money } from "../lib/money";
 import { volumeColor } from "../lib/geo";
+import { Panel } from "@/components/ui/panel";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 
 interface Chip {
   label: string;
@@ -23,26 +28,12 @@ interface Props {
   onLocateSquad: (lat: number, lng: number) => void;
 }
 
-const shell: React.CSSProperties = {
-  position: "absolute",
-  top: 18,
-  right: 18,
-  bottom: 18,
-  width: 368,
-  zIndex: 510,
-  background: "#fff",
-  border: "1px solid rgba(230,233,238,.9)",
-  borderRadius: 18,
-  boxShadow: "0 26px 64px -32px rgba(20,30,50,.5)",
-  display: "flex",
-  flexDirection: "column",
-  overflow: "hidden",
-};
+const SHELL = "absolute right-[18px] top-[18px] bottom-[18px] z-[510] flex w-[368px] flex-col";
 
 export function AgentPanel(props: Props) {
   if (props.previewing && props.plan) {
     return (
-      <aside style={shell}>
+      <Panel className={SHELL}>
         <PlanPreview
           plan={props.plan}
           typeLabels={props.typeLabels}
@@ -50,17 +41,22 @@ export function AgentPanel(props: Props) {
           onLocateObs={props.onLocateObs}
           onLocateSquad={props.onLocateSquad}
         />
-      </aside>
+      </Panel>
     );
   }
   return (
-    <aside style={shell}>
+    <Panel className={SHELL}>
       <AgentDefault chips={props.chips} onSubmitPrompt={props.onSubmitPrompt} />
-    </aside>
+    </Panel>
   );
 }
 
 // ---- plan preview -----------------------------------------------------------
+
+const ROW_ITEM =
+  "flex h-auto w-full items-center justify-start gap-[9px] rounded-[10px] border border-[var(--line-2)] bg-[#fbfcfe] px-2.5 py-2 font-normal";
+const ROW_LABEL = "block truncate text-[12px] font-semibold tracking-[-0.1px]";
+const ROW_META = "block truncate font-mono text-[9.5px] text-muted-foreground";
 
 function PlanPreview({
   plan,
@@ -90,137 +86,103 @@ function PlanPreview({
   return (
     <>
       {/* header */}
-      <div
-        style={{
-          padding: "13px 14px",
-          borderBottom: "1px solid #eef0f4",
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-        }}
-      >
-        <button onClick={onClose} title="Volver al agente" style={backBtn}>
+      <div className="flex items-center gap-2.5 border-b border-[var(--line-2)] px-3.5 py-[13px]">
+        <Button
+          variant="secondary"
+          size="icon"
+          onClick={onClose}
+          title="Volver al agente"
+          className="size-[30px] shrink-0 rounded-lg bg-[#f1f4f8]"
+        >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M15 6l-6 6 6 6"
-              stroke="#5b6675"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+            <path d="M15 6l-6 6 6 6" stroke="#5b6675" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-        </button>
-        <div style={{ lineHeight: 1.15, minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 14, fontWeight: 800, letterSpacing: "-.2px" }}>Plan de acción</div>
-          <div
-            style={{
-              fontSize: 10.5,
-              color: "#9aa3b1",
-              fontFamily: "IBM Plex Mono, monospace",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
+        </Button>
+        <div className="min-w-0 flex-1 leading-[1.15]">
+          <div className="text-sm font-extrabold tracking-[-0.2px]">Plan de acción</div>
+          <div className="truncate font-mono text-[10.5px] text-muted-foreground">
             {typeLabel} · {money(plan.budget)}
           </div>
         </div>
-        <span
-          style={{
-            fontFamily: "IBM Plex Mono, monospace",
-            fontSize: 9,
-            fontWeight: 600,
-            letterSpacing: ".4px",
-            textTransform: "uppercase",
-            color: "#1d7a4d",
-            background: "#e7f6ec",
-            border: "1px solid #cdecd8",
-            borderRadius: 5,
-            padding: "2px 7px",
-            flex: "none",
-          }}
-        >
-          Listo
-        </span>
+        <Badge variant="statusReady" className="shrink-0">Listo</Badge>
       </div>
 
-      <div className="pp-scroll" style={{ flex: 1, overflowY: "auto", padding: "13px 14px 16px" }}>
+      <div className="pp-scroll flex-1 overflow-y-auto px-3.5 pb-4 pt-[13px]">
         {/* stats grid */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <div className="grid grid-cols-2 gap-2">
           {stats.map((st, i) => (
-            <div key={i} style={{ background: st.bg, border: `1px solid ${st.border}`, borderRadius: 11, padding: "10px 12px" }}>
+            <div
+              key={i}
+              className="rounded-[11px] border px-3 py-2.5"
+              style={{ background: st.bg, borderColor: st.border }}
+            >
               <div
-                style={{
-                  fontFamily: "IBM Plex Mono, monospace",
-                  fontSize: 17,
-                  fontWeight: 600,
-                  color: st.color,
-                  letterSpacing: "-.5px",
-                  lineHeight: 1,
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                }}
+                className="truncate font-mono text-[17px] font-semibold leading-none tracking-[-0.5px]"
+                style={{ color: st.color }}
               >
                 {st.value}
               </div>
-              <div style={{ fontSize: 10, color: "#8a94a3", fontWeight: 500, marginTop: 6 }}>{st.label}</div>
+              <div className="mt-1.5 text-[10px] font-medium text-muted-foreground">{st.label}</div>
             </div>
           ))}
         </div>
 
         {/* budget bar */}
-        <div style={{ marginTop: 10, background: "#f7f9fc", border: "1px solid #eef0f4", borderRadius: 11, padding: "10px 12px" }}>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-            <span style={{ fontSize: 10, color: "#8a94a3", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".4px" }}>
+        <div className="mt-2.5 rounded-[11px] border border-[var(--line-2)] bg-[var(--surface-1)] px-3 py-2.5">
+          <div className="flex items-baseline justify-between">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
               Presupuesto usado
             </span>
-            <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 12.5, fontWeight: 600 }}>
+            <span className="font-mono text-[12.5px] font-semibold">
               {money(s.spent)} · {s.budgetPct}%
             </span>
           </div>
-          <div style={{ marginTop: 7, height: 6, borderRadius: 4, background: "#e7ebf1", overflow: "hidden" }}>
-            <div style={{ width: `${s.budgetPct}%`, height: "100%", background: "var(--acc,#2f64e6)" }} />
+          <div className="mt-[7px] h-1.5 overflow-hidden rounded bg-[#e7ebf1]">
+            <div className="h-full bg-primary" style={{ width: `${s.budgetPct}%` }} />
           </div>
-          <div style={{ fontSize: 9.5, color: "#aab2bd", marginTop: 6, fontFamily: "IBM Plex Mono, monospace" }}>
+          <div className="mt-1.5 font-mono text-[9.5px] text-[#aab2bd]">
             costo estimado · placeholder del módulo
           </div>
         </div>
 
         {/* top critical */}
         <SectionTitle title="Más críticos" hint="clic para ubicar" />
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div className="flex flex-col gap-1.5">
           {plan.topCritical.map((tc) => (
-            <button key={tc.id} onClick={() => onLocateObs(tc.id)} style={rowItem}>
-              <span style={{ ...badge, background: "#eef1f5", color: "#41506a" }}>{tc.rank}</span>
-              <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-                <span style={rowLabel}>
+            <Button key={tc.id} variant="ghost" onClick={() => onLocateObs(tc.id)} className={ROW_ITEM}>
+              <RankBadge className="bg-[var(--bg)] text-[#41506a]">{tc.rank}</RankBadge>
+              <span className="min-w-0 flex-1 text-left">
+                <span className={ROW_LABEL}>
                   {(typeLabels[tc.slug] ?? tc.slug) + (tc.zone ? " · " + tc.zone : "")}
                 </span>
-                <span style={rowMeta}>{`${Math.round(tc.volume)} ${typeUnit(tc.slug)} · ${money(tc.cost)}`}</span>
+                <span className={ROW_META}>{`${Math.round(tc.volume)} ${typeUnit(tc.slug)} · ${money(tc.cost)}`}</span>
               </span>
-              <span style={{ width: 9, height: 9, borderRadius: "50%", background: volumeColor(tc.volume, maxVol), flex: "none" }} />
-            </button>
+              <span
+                className="size-[9px] shrink-0 rounded-full"
+                style={{ background: volumeColor(tc.volume, maxVol) }}
+              />
+            </Button>
           ))}
           {plan.topCritical.length === 0 && <Empty>Sin baches dentro del presupuesto.</Empty>}
         </div>
 
         {/* crews (clusters) — categorical color per crew */}
         <SectionTitle title="Cuadrillas (clústeres)" hint="clic para ubicar" />
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div className="flex flex-col gap-1.5">
           {plan.squads.map((sq) => (
-            <button
+            <Button
               key={sq.idx}
+              variant="ghost"
               onClick={() => onLocateSquad(sq.centroid.lat, sq.centroid.lng)}
-              style={rowItem}
+              className={ROW_ITEM}
             >
-              <span style={{ ...badge, background: sq.color, color: "#fff" }}>C{sq.idx}</span>
-              <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-                <span style={rowLabel}>Cuadrilla {sq.idx}</span>
-                <span style={rowMeta}>{`${sq.count} baches · ${money(sq.cost)}`}</span>
+              <RankBadge className="text-white" style={{ background: sq.color }}>C{sq.idx}</RankBadge>
+              <span className="min-w-0 flex-1 text-left">
+                <span className={ROW_LABEL}>Cuadrilla {sq.idx}</span>
+                <span className={ROW_META}>{`${sq.count} baches · ${money(sq.cost)}`}</span>
               </span>
-              <span style={{ width: 9, height: 9, borderRadius: "50%", background: sq.color, flex: "none" }} />
-            </button>
+              <span className="size-[9px] shrink-0 rounded-full" style={{ background: sq.color }} />
+            </Button>
           ))}
           {plan.squads.length === 0 && <Empty>Sin cuadrillas asignadas.</Empty>}
         </div>
@@ -229,19 +191,36 @@ function PlanPreview({
   );
 }
 
+function RankBadge({
+  children,
+  className,
+  style,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <span
+      className={`flex size-6 shrink-0 items-center justify-center rounded-[7px] font-mono text-[10.5px] font-semibold ${className ?? ""}`}
+      style={style}
+    >
+      {children}
+    </span>
+  );
+}
+
 function SectionTitle({ title, hint }: { title: string; hint: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "baseline", gap: 8, margin: "16px 0 8px" }}>
-      <span style={{ fontSize: 10, letterSpacing: ".5px", fontWeight: 700, color: "#8a94a3", textTransform: "uppercase" }}>
-        {title}
-      </span>
-      <span style={{ fontSize: 10, color: "#b3bac5" }}>{hint}</span>
+    <div className="mb-2 mt-4 flex items-baseline gap-2">
+      <span className="text-[10px] font-bold uppercase tracking-[0.5px] text-muted-foreground">{title}</span>
+      <span className="text-[10px] text-[#b3bac5]">{hint}</span>
     </div>
   );
 }
 
 function Empty({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: 11.5, color: "#aab2bd", padding: "6px 2px" }}>{children}</div>;
+  return <div className="px-0.5 py-1.5 text-[11.5px] text-[#aab2bd]">{children}</div>;
 }
 
 // ---- agent default ----------------------------------------------------------
@@ -275,53 +254,25 @@ function AgentDefault({
 
   return (
     <>
-      <div
-        style={{
-          padding: "14px 16px",
-          borderBottom: "1px solid #eef0f4",
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-        }}
-      >
-        <div
-          style={{
-            width: 30,
-            height: 30,
-            borderRadius: 9,
-            background: "linear-gradient(135deg,var(--acc,#2f64e6),#6a4cf0)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flex: "none",
-          }}
-        >
+      <div className="flex items-center gap-2.5 border-b border-[var(--line-2)] px-4 py-3.5">
+        <div className="flex size-[30px] shrink-0 items-center justify-center rounded-[9px] bg-[linear-gradient(135deg,var(--acc,#2f64e6),#6a4cf0)]">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
             <path d="M12 3l1.6 4.8L18 9.4l-4.4 1.6L12 16l-1.6-5L6 9.4l4.4-1.6L12 3z" fill="#fff" />
             <circle cx="18.5" cy="5.5" r="1.4" fill="#fff" />
           </svg>
         </div>
-        <div style={{ lineHeight: 1.15 }}>
-          <div style={{ fontSize: 14, fontWeight: 800, letterSpacing: "-.2px" }}>Agente</div>
-          <div style={{ fontSize: 10.5, color: "#9aa3b1", fontWeight: 500 }}>
+        <div className="leading-[1.15]">
+          <div className="text-sm font-extrabold tracking-[-0.2px]">Agente</div>
+          <div className="text-[10.5px] font-medium text-muted-foreground">
             Genera planes de reparación con un clic
           </div>
         </div>
       </div>
 
-      <div className="pp-scroll" style={{ flex: 1, overflowY: "auto", padding: "16px 16px 10px" }}>
-        <div style={{ display: "flex", gap: 9, marginBottom: 13 }}>
-          <div
-            style={{
-              width: 22,
-              height: 22,
-              borderRadius: 7,
-              background: "linear-gradient(135deg,var(--acc,#2f64e6),#6a4cf0)",
-              flex: "none",
-              marginTop: 1,
-            }}
-          />
-          <div style={{ flex: 1, fontSize: 12.5, lineHeight: 1.5, color: "#3a4655" }}>
+      <div className="pp-scroll flex-1 overflow-y-auto px-4 pb-2.5 pt-4">
+        <div className="mb-[13px] flex gap-[9px]">
+          <div className="mt-px size-[22px] shrink-0 rounded-[7px] bg-[linear-gradient(135deg,var(--acc,#2f64e6),#6a4cf0)]" />
+          <div className="flex-1 text-[12.5px] leading-[1.5] text-[#3a4655]">
             Soy tu agente del mapa de prioridades. Elige un <strong>tipo de problema</strong>, fija
             el <strong>presupuesto</strong>, acota la <strong>región</strong> y genera un{" "}
             <strong>plan de acción</strong>: los baches más críticos dentro del presupuesto y las{" "}
@@ -329,66 +280,42 @@ function AgentDefault({
             vuelve a generar el plan.
           </div>
         </div>
-        <div style={{ display: "flex", gap: 9, marginBottom: 13, opacity: 0.95 }}>
-          <div style={{ width: 22, height: 22, borderRadius: 7, background: "#e7eaf0", flex: "none", marginTop: 1 }} />
-          <div style={{ flex: 1, fontSize: 12, lineHeight: 1.5, color: "#8a94a3" }}>
+        <div className="mb-[13px] flex gap-[9px] opacity-95">
+          <div className="mt-px size-[22px] shrink-0 rounded-[7px] bg-[#e7eaf0]" />
+          <div className="flex-1 text-[12px] leading-[1.5] text-muted-foreground">
             O descríbelo en lenguaje natural abajo (p. ej. <em>"baches en Cuauhtémoc, 2 millones,
             3 cuadrillas"</em>). Lo interpreto y relleno el panel para que lo revises antes de generar.
           </div>
         </div>
       </div>
 
-      <div style={{ borderTop: "1px solid #eef0f4", padding: "10px 12px 12px", background: "rgba(255,255,255,.6)" }}>
+      <div className="border-t border-[var(--line-2)] bg-white/60 px-3 pb-3 pt-2.5">
         {(note || err) && (
           <div
+            className="mb-[9px] rounded-lg border px-[9px] py-1.5 font-mono text-[10.5px] leading-[1.4]"
             style={{
-              fontSize: 10.5,
-              lineHeight: 1.4,
-              marginBottom: 9,
-              padding: "6px 9px",
-              borderRadius: 8,
-              fontFamily: "IBM Plex Mono, monospace",
               background: err ? "#fdeceb" : "#eef4ff",
-              border: `1px solid ${err ? "#f6d4d2" : "#dbe6ff"}`,
+              borderColor: err ? "#f6d4d2" : "#dbe6ff",
               color: err ? "#c2333a" : "#3a4655",
             }}
           >
             {err ? `No pude interpretarlo: ${err}` : note}
           </div>
         )}
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 9 }}>
+        <div className="mb-[9px] flex flex-wrap gap-1.5">
           {chips.map((c) => (
-            <button
+            <Button
               key={c.label}
+              variant="outline"
               onClick={c.run}
-              style={{
-                background: "#f4f6f9",
-                border: "1px solid #e6e9ee",
-                borderRadius: 16,
-                padding: "5px 10px",
-                fontSize: 10.5,
-                fontWeight: 500,
-                color: "#41506a",
-                cursor: "pointer",
-                whiteSpace: "nowrap",
-              }}
+              className="h-auto whitespace-nowrap rounded-2xl bg-[#f4f6f9] px-2.5 py-[5px] text-[10.5px] font-medium text-[#41506a]"
             >
               {c.label}
-            </button>
+            </Button>
           ))}
         </div>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            background: "#fff",
-            border: "1px solid #e3e7ee",
-            borderRadius: 12,
-            padding: "5px 5px 5px 13px",
-          }}
-        >
-          <input
+        <div className="flex items-center gap-2 rounded-xl border border-[var(--line)] bg-card py-[5px] pl-[13px] pr-[5px]">
+          <Input
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={(e) => {
@@ -399,109 +326,25 @@ function AgentDefault({
             }}
             disabled={busy || !onSubmitPrompt}
             placeholder="Describe un plan en lenguaje natural…"
-            style={{
-              flex: 1,
-              border: "none",
-              outline: "none",
-              fontFamily: "Public Sans, sans-serif",
-              fontSize: 13,
-              background: "none",
-              minWidth: 0,
-              color: "#1b2430",
-            }}
+            className="h-auto min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-[13px] shadow-none focus-visible:ring-0 md:text-[13px]"
           />
-          <button
+          <Button
             onClick={submit}
             disabled={busy || !prompt.trim() || !onSubmitPrompt}
+            size="icon"
             title="Interpretar"
-            style={{
-              flex: "none",
-              background: busy || !prompt.trim() ? "#cdd4de" : "var(--acc,#2f64e6)",
-              color: "#fff",
-              border: "none",
-              borderRadius: 9,
-              width: 34,
-              height: 34,
-              cursor: busy || !prompt.trim() ? "not-allowed" : "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
+            className="size-[34px] shrink-0 rounded-[9px]"
           >
             {busy ? (
-              <span
-                style={{
-                  width: 15,
-                  height: 15,
-                  border: "2px solid rgba(255,255,255,.5)",
-                  borderTopColor: "#fff",
-                  borderRadius: "50%",
-                  display: "inline-block",
-                  animation: "ppspin .7s linear infinite",
-                }}
-              />
+              <Spinner size={15} className="border-white/50 border-t-white" />
             ) : (
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                 <path d="M5 12h13M13 6l6 6-6 6" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             )}
-          </button>
+          </Button>
         </div>
       </div>
     </>
   );
 }
-
-const backBtn: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  background: "#f1f4f8",
-  border: "none",
-  borderRadius: 8,
-  width: 30,
-  height: 30,
-  cursor: "pointer",
-  flex: "none",
-};
-const rowItem: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 9,
-  width: "100%",
-  padding: "8px 10px",
-  border: "1px solid #eef0f4",
-  borderRadius: 10,
-  background: "#fbfcfe",
-  cursor: "pointer",
-};
-const badge: React.CSSProperties = {
-  width: 24,
-  height: 24,
-  borderRadius: 7,
-  fontFamily: "IBM Plex Mono, monospace",
-  fontSize: 10.5,
-  fontWeight: 600,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  flex: "none",
-};
-const rowLabel: React.CSSProperties = {
-  display: "block",
-  fontSize: 12,
-  fontWeight: 600,
-  letterSpacing: "-.1px",
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-};
-const rowMeta: React.CSSProperties = {
-  display: "block",
-  fontSize: 9.5,
-  color: "#9aa3b1",
-  fontFamily: "IBM Plex Mono, monospace",
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-};

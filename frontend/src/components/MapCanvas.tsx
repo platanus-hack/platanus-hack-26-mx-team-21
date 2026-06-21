@@ -286,5 +286,5 @@ export const MapCanvas = memo(function MapCanvas(props: Props) {
     map.flyTo([props.panTarget.lat, props.panTarget.lng], 14, { animate: true });
   }, [props.panTarget]);
 
-  return <div ref={elRef} style={{ position: "absolute", inset: 0, zIndex: 0 }} />;
+  return <div ref={elRef} className="absolute inset-0 z-0" />;
 });

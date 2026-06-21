@@ -1,5 +1,8 @@
 import type { TypeCount } from "../lib/types";
 import { typeColor } from "../lib/types";
+import { Panel } from "@/components/ui/panel";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 
 interface Props {
   types: TypeCount[];
@@ -16,235 +19,117 @@ interface Props {
   onSignOut: () => void;
 }
 
-function checkbox(on: boolean, color: string) {
-  return {
-    box: {
-      width: 16,
-      height: 16,
-      borderRadius: 5,
-      flex: "none" as const,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontSize: 11,
-      color: "#fff",
-      border: `1.5px solid ${on ? color : "#cdd4de"}`,
-      background: on ? color : "#fff",
-    } as React.CSSProperties,
-    check: on ? "✓" : "",
-  };
-}
+const SECTION_LABEL = "text-[10px] font-bold uppercase tracking-[0.7px] text-muted-foreground";
+const ROW = "flex h-auto w-full items-center justify-start gap-[9px] rounded-md px-0.5 py-1.5 text-left font-normal hover:bg-transparent";
+const COUNT = "font-mono text-[9.5px] text-muted-foreground";
 
-const rowBtn: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 9,
-  width: "100%",
-  border: "none",
-  background: "none",
-  cursor: "pointer",
-  padding: "6px 2px",
-  textAlign: "left",
-};
-const sectionLabel: React.CSSProperties = {
-  fontSize: 10,
-  letterSpacing: ".7px",
-  fontWeight: 700,
-  color: "#8a94a3",
-  textTransform: "uppercase",
-};
-
-export function LayersPanel(props: Props) {
-  const pinCb = checkbox(props.showPins, "#2f64e6");
-  const roisCb = checkbox(props.showRois, "#e5484d");
-
+/** A square (layers) or round (types) colored toggle indicator. */
+function Indicator({ on, color, round }: { on: boolean; color: string; round?: boolean }) {
   return (
-    <aside
+    <span
+      className={`flex shrink-0 items-center justify-center text-[11px] text-white ${
+        round ? "size-[11px] rounded-full border-2" : "size-4 rounded-[5px] border-[1.5px]"
+      }`}
       style={{
-        position: "absolute",
-        top: 18,
-        left: 18,
-        // lift the panel to a consistent gap above the action dock / launcher
-        bottom: props.bottom,
-        zIndex: 500,
-        width: 236,
-        background: "#fff",
-        border: "1px solid rgba(230,233,238,.9)",
-        borderRadius: 16,
-        boxShadow: "0 18px 44px -26px rgba(20,30,50,.42),0 2px 6px -3px rgba(20,30,50,.12)",
-        overflow: "hidden",
-        display: "flex",
-        flexDirection: "column",
+        borderColor: on ? color : "#cdd4de",
+        background: on ? color : "#fff",
       }}
     >
+      {on && !round ? "✓" : ""}
+    </span>
+  );
+}
+
+export function LayersPanel(props: Props) {
+  return (
+    <Panel
+      className="absolute left-[18px] top-[18px] z-[500] flex w-[236px] flex-col"
+      style={{ bottom: props.bottom }}
+    >
       {/* header */}
-      <div
-        style={{
-          padding: "13px 14px",
-          borderBottom: "1px solid #eef0f4",
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          flex: "none",
-        }}
-      >
-        <div
-          style={{
-            width: 30,
-            height: 30,
-            borderRadius: 8,
-            background: "#1b2430",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flex: "none",
-          }}
-        >
-          <div style={{ width: 12, height: 12, border: "2.5px solid #fff", borderRadius: "50%", position: "relative" }}>
-            <div
-              style={{
-                position: "absolute",
-                width: 3.5,
-                height: 3.5,
-                background: "#fff",
-                borderRadius: "50%",
-                top: "50%",
-                left: "50%",
-                transform: "translate(-50%,-50%)",
-              }}
-            />
+      <div className="flex shrink-0 items-center gap-2.5 border-b border-[var(--line-2)] px-3.5 py-[13px]">
+        <div className="flex size-[30px] shrink-0 items-center justify-center rounded-lg bg-[var(--ink)]">
+          <div className="relative size-3 rounded-full border-[2.5px] border-white">
+            <div className="absolute left-1/2 top-1/2 size-[3.5px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white" />
           </div>
         </div>
-        <div style={{ lineHeight: 1.12, minWidth: 0 }}>
-          <div style={{ fontSize: 13.5, fontWeight: 800, letterSpacing: "-.2px" }}>CityCrawl</div>
-          <div style={{ fontSize: 10, color: "#9aa3b1", fontWeight: 500 }}>CDMX · Mapa de prioridades</div>
+        <div className="min-w-0 leading-[1.12]">
+          <div className="text-[13.5px] font-extrabold tracking-[-0.2px]">CityCrawl</div>
+          <div className="text-[10px] font-medium text-muted-foreground">CDMX · Mapa de prioridades</div>
         </div>
-        <div style={{ marginLeft: "auto", textAlign: "right" }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "flex-end",
-              gap: 5,
-              fontFamily: "IBM Plex Mono, monospace",
-              fontSize: 9,
-              color: "#30a46c",
-              fontWeight: 600,
-            }}
-          >
-            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#30a46c", animation: "pppulse 1.8s infinite" }} />
+        <div className="ml-auto text-right">
+          <div className="flex items-center justify-end gap-[5px] font-mono text-[9px] font-semibold text-[var(--success)]">
+            <span className="size-1.5 animate-[pppulse_1.8s_infinite] rounded-full bg-[var(--success)]" />
             EN VIVO
           </div>
-          <div style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 8.5, color: "#b3bac5", marginTop: 2 }}>
-            {props.lastSweepLabel}
-          </div>
+          <div className="mt-0.5 font-mono text-[8.5px] text-[#b3bac5]">{props.lastSweepLabel}</div>
         </div>
       </div>
 
       {/* body */}
-      <div style={{ padding: "12px 14px 14px", flex: 1, minHeight: 0, overflowY: "auto" }} className="pp-scroll">
-        <div style={{ ...sectionLabel, marginBottom: 8 }}>Capas</div>
+      <div className="pp-scroll min-h-0 flex-1 overflow-y-auto px-3.5 pb-3.5 pt-3">
+        <div className={`${SECTION_LABEL} mb-2`}>Capas</div>
 
-        <button onClick={props.onTogglePins} style={rowBtn}>
-          <span style={pinCb.box}>{pinCb.check}</span>
-          <span style={{ flex: 1, textAlign: "left", fontSize: 12.5, fontWeight: 600 }}>Instancias</span>
-          <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 9.5, color: "#9aa3b1" }}>{props.totalObs}</span>
-        </button>
+        <Button variant="ghost" onClick={props.onTogglePins} className={ROW}>
+          <Indicator on={props.showPins} color="#2f64e6" />
+          <span className="flex-1 text-left text-[12.5px] font-semibold">Instancias</span>
+          <span className={COUNT}>{props.totalObs}</span>
+        </Button>
 
         {/* volume legend */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 2px 5px 27px" }}>
-          <span style={{ fontSize: 9.5, color: "#aab2bd" }}>menor</span>
-          <span
-            style={{
-              flex: 1,
-              height: 8,
-              borderRadius: 5,
-              background: "linear-gradient(90deg,#30a46c,#f5a623,#e5484d)",
-            }}
-          />
-          <span style={{ fontSize: 9.5, color: "#aab2bd" }}>mayor volumen</span>
+        <div className="flex items-center gap-2 py-[3px] pb-[5px] pl-[27px]">
+          <span className="text-[9.5px] text-[#aab2bd]">menor</span>
+          <span className="h-2 flex-1 rounded-[5px] bg-[linear-gradient(90deg,#30a46c,#f5a623,#e5484d)]" />
+          <span className="text-[9.5px] text-[#aab2bd]">mayor volumen</span>
         </div>
 
-        <button onClick={props.onToggleRois} style={rowBtn}>
-          <span style={roisCb.box}>{roisCb.check}</span>
-          <span style={{ flex: 1, textAlign: "left", fontSize: 12.5, fontWeight: 600 }}>Zonas de riesgo</span>
-          <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 9.5, color: "#9aa3b1" }}>{props.roiCount}</span>
-        </button>
-        <div style={{ paddingLeft: 27, fontSize: 9.5, color: "#aab2bd", marginTop: -2, marginBottom: 2 }}>
+        <Button variant="ghost" onClick={props.onToggleRois} className={ROW}>
+          <Indicator on={props.showRois} color="#e5484d" />
+          <span className="flex-1 text-left text-[12.5px] font-semibold">Zonas de riesgo</span>
+          <span className={COUNT}>{props.roiCount}</span>
+        </Button>
+        <div className="-mt-0.5 mb-0.5 pl-[27px] text-[9.5px] text-[#aab2bd]">
           externas · crimen, choques, inundación
         </div>
 
-        <div style={{ height: 1, background: "#eef0f4", margin: "11px 0 9px" }} />
-        <div style={{ ...sectionLabel, marginBottom: 5 }}>Tipos de observación</div>
+        <Separator className="my-[10px] bg-[var(--line-2)]" />
+        <div className={`${SECTION_LABEL} mb-[5px]`}>Tipos de observación</div>
 
         {props.types.map((t) => {
           const on = props.activeTypes[t.slug];
           return (
-            <button
+            <Button
               key={t.slug}
+              variant="ghost"
               onClick={() => props.onToggleType(t.slug)}
-              style={{ ...rowBtn, opacity: on ? 1 : 0.55 }}
+              className={`${ROW} ${on ? "opacity-100" : "opacity-55"}`}
             >
+              <Indicator on={on} color={typeColor(t.slug)} round />
               <span
-                style={{
-                  width: 11,
-                  height: 11,
-                  borderRadius: "50%",
-                  flex: "none",
-                  border: `2px solid ${on ? typeColor(t.slug) : "#cdd4de"}`,
-                  background: on ? typeColor(t.slug) : "#fff",
-                }}
-              />
-              <span
-                style={{
-                  flex: 1,
-                  textAlign: "left",
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: on ? "#1b2430" : "#a9b1bd",
-                }}
+                className="flex-1 text-left text-[12px] font-semibold"
+                style={{ color: on ? "#1b2430" : "#a9b1bd" }}
               >
                 {t.label}
               </span>
-              <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 9.5, color: "#aab2bd" }}>{t.count}</span>
-            </button>
+              <span className="font-mono text-[9.5px] text-[#aab2bd]">{t.count}</span>
+            </Button>
           );
         })}
 
-        <div style={{ height: 1, background: "#eef0f4", margin: "11px 0 9px" }} />
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 10.5, color: "#7a8493" }}>
-          <span
-            style={{
-              width: 10,
-              height: 10,
-              borderRadius: "50%",
-              background: "#fff",
-              border: "1.5px dashed #b3bac5",
-              flex: "none",
-            }}
-          />
+        <Separator className="my-[10px] bg-[var(--line-2)]" />
+        <div className="flex items-center gap-2 text-[10.5px] text-[#7a8493]">
+          <span className="size-2.5 shrink-0 rounded-full border-[1.5px] border-dashed border-[#b3bac5] bg-white" />
           Sin volumen — pin neutral
         </div>
 
-        <button
+        <Button
+          variant="outline"
           onClick={props.onSignOut}
-          style={{
-            marginTop: 12,
-            width: "100%",
-            height: 30,
-            border: "1px solid #e6e9ee",
-            background: "#fff",
-            borderRadius: 9,
-            fontFamily: "Public Sans, sans-serif",
-            fontSize: 11.5,
-            fontWeight: 600,
-            color: "#5b6675",
-            cursor: "pointer",
-          }}
+          className="mt-3 h-[30px] w-full rounded-[9px] text-[11.5px] font-semibold text-[var(--ink-2)]"
         >
           Cerrar sesión
-        </button>
+        </Button>
       </div>
-    </aside>
+    </Panel>
   );
 }
