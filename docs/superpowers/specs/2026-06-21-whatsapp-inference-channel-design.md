@@ -1,95 +1,131 @@
-# WhatsApp → Inference Realtime Channel — Design
+# WhatsApp → Inference Confirmation Channel — Design
 
 **Date:** 2026-06-21
 **Status:** Approved, pending implementation plan
+**Component:** Confirmation gate between WhatsApp citizen reports and the non-public inference server
 
 ## Problem
 
-The WhatsApp handler must hand an incoming image to an **inference server that is not
-publicly exposed**, then wait for the model's response. We use **Supabase Realtime** as
-the message bus: the inference server holds only an outbound websocket to Supabase and
-never accepts public ingress. Incoming images are also community-sourced **events**, so
-the handler will (later) create a `vision.observation` from each one — distinguished from
-sweep-sourced observations as a `whatsapp` source.
+Citizens send a **photo + location pin** over WhatsApp (handled by the existing
+`services/whatsapp-controller` → `services/api` write API). Before a report becomes an
+observation on the map, the photo must be **confirmed by an inference server that is not
+publicly exposed**. We use **Supabase Realtime** as the message bus: the inference server
+holds only an outbound websocket to Supabase — no public ingress.
 
-## Scope
+**End goal:** ask the citizen for a picture + location → send the picture to the inference
+server for **confirmation** via Supabase → **only on positive confirmation, create the
+observation**.
 
-In scope:
-- A `community.inference_jobs` table that carries one inference request/response over
-  Supabase Realtime.
-- Lifecycle status + error channel.
-- Schema-prep on `vision.observations` so the handler can create a community-sourced
-  observation later without a further migration.
+Inference therefore runs *before* the observation exists and **gates** its creation. This
+is not async enrichment, and it replaces the write API's current "create immediately"
+behavior for citizen reports.
 
-Out of scope (deferred, handler-side, later work):
-- The WhatsApp webhook handler code and the inference server code.
-- Deriving the observation's lat/lng (location source TBD).
-- Actually creating the `vision.observation` + thumbnail + attributes + outbox event.
+## Reconciliation with existing pipeline
+
+The citizen-reports pipeline already exists (see
+`2026-06-20-whatsapp-citizen-reports-design.md`):
+
+- `services/whatsapp-controller` (Kapso adapter, **no DB/R2 creds**) collects photo + pin
+  and POSTs multipart to the write API `POST /v1/observations/citizen`.
+- `services/api` `modules/observations/store.py` already creates the observation in one
+  transaction via a **synthetic sweep** + a `vision.sources` row (slug `whatsapp-citizen`)
+  + thumbnail + `observation_inserted` outbox event + `rebuild_tenant_visible`. It accepts
+  a caller-supplied `observation_id`.
+
+Consequences for this design:
+
+- **No `vision.observations` schema change.** The synthetic-sweep path keeps `sweep_id`
+  `NOT NULL`; provenance is already modeled. The earlier "Part-4" prep (nullable
+  `sweep_id` + `source_id`) is **dropped**.
+- **Source slug stays `whatsapp-citizen`** (existing code; the channel creates no source).
+- **The write API is the "handler" that waits.** It owns R2 + DB creds, so it uploads the
+  photo, enqueues the inference job, waits for confirmation, and only then calls the
+  existing `create_citizen_observation`.
 
 ## Architecture & data flow
 
-Two trusted backends, both authenticating to Supabase with the **service-role** key
-(both bypass RLS). The inference server never gets a public ingress — it only holds an
-outbound Realtime websocket.
+```
+WhatsApp user ──photo+pin──▶ controller ──multipart──▶ WRITE API (services/api)
+                                                          1. obs_id := new uuid
+                                                          2. upload photo → R2
+                                                               observations/{obs_id}/report.jpg
+                                                          3. INSERT inference_jobs
+                                                               {r2_url, thinking_mode,
+                                                                status='pending', observation_id=obs_id}
+                                                                        │
+                                            Realtime INSERT (filter status=pending)
+                                                                        ▼
+                                                      Inference server (NOT public)
+                                                          4. UPDATE status='processing' (atomic claim)
+                                                          5. fetch r2_url, run model per thinking_mode
+                                                          6. UPDATE response={confirmed,…},
+                                                               status='done'  (or error+status='error')
+                                                                        │
+                                            Realtime UPDATE (filter id=this job)
+                                                                        ▼
+                                                      WRITE API resumes (waiter)
+                                                          7. if response.confirmed:
+                                                               create_citizen_observation(obs_id, …)  ← existing path
+                                                             else: skip; report not confirmed
+                                                          8. return result to controller
+controller ──reply──▶ citizen ("confirmado / no se pudo confirmar, intenta otra foto")
+```
 
-```
-WhatsApp webhook ──► Handler (FastAPI / Fly)
-                       1. upload image → R2
-                       2. INSERT job {r2_url, thinking_mode, status='pending'}
-                                          │
-                    Realtime INSERT (filter status=pending)
-                                          ▼
-                            Inference server (not public)
-                       3. UPDATE status='processing'   (atomic claim)
-                       4. fetch r2_url, run model per thinking_mode
-                       5. UPDATE response=…, status='done'   (or error+status='error')
-                                          │
-                    Realtime UPDATE (filter id=this job)
-                                          ▼
-                            Handler resumes
-                       6. reply on WhatsApp
-                       7. (later) create community vision.observation
-```
+The photo is uploaded once, to the **final** thumbnail path keyed on a pre-generated
+`obs_id`, so on confirmation the existing `store.py` reuses that same id and path — no
+copy/move, no second upload.
 
 ## The table — `community.inference_jobs`
 
-New `community` schema (signals the new source, keeps the table out of `public`).
-Follows the repo convention of `text + CHECK` rather than PostgreSQL enums.
+New `community` schema (signals the new source, keeps the table out of `public`). Follows
+the repo's `text + CHECK` convention rather than PostgreSQL enums.
 
 | column | type | notes |
 |---|---|---|
-| `id` | `uuid primary key default gen_random_uuid()` | correlation id |
-| `r2_url` | `text not null` | object URL the inference server fetches |
+| `id` | `uuid primary key default gen_random_uuid()` | job/correlation id |
+| `r2_url` | `text not null` | the photo the inference server fetches (`observations/{obs_id}/report.jpg`) |
 | `thinking_mode` | `text not null check (thinking_mode in ('flash','thinking'))` | the two modes |
 | `status` | `text not null default 'pending' check (status in ('pending','processing','done','error'))` | lifecycle |
-| `response` | `jsonb` | empty until the server writes the result (jsonb so it can carry classification + attributes) |
+| `response` | `jsonb` | empty until the server writes the confirmation verdict (e.g. `{confirmed: bool, type?, notes?}`) |
 | `error` | `text` | failure reason, set when `status = 'error'` |
-| `location` | `geography(Point,4326)` (nullable) | forward-hook for the deferred lat/lng, so no later migration is needed |
-| `observation_id` | `uuid references vision.observations(id)` (nullable) | filled when the handler creates the observation |
+| `observation_id` | `uuid` | the **pre-generated** id the write API will use on confirm; not yet an FK target at insert time, so plain uuid (no FK — the obs row does not exist until step 7) |
 | `created_at` | `timestamptz not null default now()` | |
 | `updated_at` | `timestamptz not null default now()` | bumped by trigger on update |
+
+`observation_id` is intentionally **not** a foreign key: the row it names is created only
+after confirmation, so an FK would reject the insert. It is provenance/correlation only.
 
 ### Realtime wiring
 - `alter publication supabase_realtime add table community.inference_jobs;`
 - `alter table community.inference_jobs replica identity full;` — so UPDATE events carry
-  the changed columns and clients can filter on them.
+  changed columns and clients can filter on them.
 
 ### Access / RLS
 - `alter table community.inference_jobs enable row level security;` with **no**
-  anon/authenticated policies → only service-role reaches it. Both backends are
-  service-role, which bypasses RLS.
-- Expose the `community` schema to PostgREST (add to `db-schemas`) so `supabase-py`
-  service-role clients can read/write it; RLS keeps it private from anon/authenticated.
-- `grant usage on schema community to service_role;` and table privileges to
-  `service_role` (a brand-new schema is not covered by existing default privileges).
+  anon/authenticated policies → only service-role reaches it. Both backends (write API,
+  inference server) are service-role and bypass RLS.
+- Expose the `community` schema to PostgREST (`db-schemas`) so `supabase-py` service-role
+  clients can read/write it; RLS keeps it private from anon/authenticated.
+- `grant usage on schema community to service_role;` + table privileges to `service_role`
+  (a brand-new schema is not covered by existing default privileges).
 
 ### updated_at trigger
 A small `before update` trigger sets `updated_at = now()`.
 
+## The waiter (write API)
+
+The write API blocks one HTTP request on the confirmation. Primary mechanism: a Realtime
+UPDATE subscription filtered on the job id with a **timeout** (e.g. 30–60s; longer for
+`thinking`). Fallback if Realtime-in-a-sync-handler is awkward: poll
+`select status, response from community.inference_jobs where id = $1` on a short interval
+until `status in ('done','error')` or timeout. On timeout → status stays `processing`;
+the API returns a "pending confirmation" result and the citizen is asked to wait/retry.
+(Decide Realtime-vs-poll in the plan; both satisfy the contract.)
+
 ## Concurrency
 
-A single inference worker makes this trivial. To stay correct if two ever run, step 3 is
-an **atomic claim**:
+Single inference worker → trivial. To stay correct with two workers, step 4 is an atomic
+claim:
 
 ```sql
 update community.inference_jobs
@@ -99,42 +135,26 @@ returning *;
 ```
 
 Only one worker wins the row. Realtime is the *notification*; this conditional UPDATE is
-the *lock*. (pgmq is the alternative transport, but Realtime is the chosen mechanism, so
-this conditional update is the lightweight guard.)
-
-## Community-observation schema-prep
-
-`vision.observations.sweep_id` is currently `NOT NULL`, so a community observation cannot
-exist without a sweep. Minimal prep so the handler is unblocked later:
-
-- `alter table vision.observations alter column sweep_id drop not null;`
-- `alter table vision.observations add column source_id uuid references vision.sources(id);`
-- add check `(sweep_id is not null or source_id is not null)` — every observation keeps a
-  provenance.
-- seed a `vision.sources` row with `slug = 'whatsapp'` — the handle the frontend/priority
-  queries filter on to distinguish community-sourced observations.
-
-Visibility is purely geographic (`platform.can_view_observation` / the
-`tenant_visible_observations` read-model clip by boundary). So once the handler inserts a
-community observation that falls inside the tenant boundary and emits an
-`observation_inserted` outbox event (the existing path), it surfaces on the map. **No**
-changes to `can_view_observation` or the R2 broker are required.
+the *lock*.
 
 ## Testing
 
-- Migration applies cleanly on the remote project (idempotent where the repo's migrations
-  are).
+- Migration applies cleanly on the remote project.
 - Insert a `pending` job → row visible; `replica identity full` set; table is a member of
   the `supabase_realtime` publication.
 - Atomic-claim UPDATE: a second `where status='pending'` claim on an already-claimed row
   returns zero rows.
 - `thinking_mode` / `status` CHECK constraints reject out-of-domain values.
 - anon/authenticated roles cannot select/insert (RLS); service-role can.
-- A `vision.observation` with `sweep_id is null` and `source_id` = the `whatsapp` source
-  inserts successfully and is rejected when both `sweep_id` and `source_id` are null.
+- End-to-end (against remote, behind a flag): insert job → simulate inference UPDATE
+  (`status='done'`, `response={"confirmed":true}`) → write API creates the observation
+  with the pre-generated `obs_id` and it renders on the map; `confirmed:false` → no
+  observation created.
 
-## Open / deferred decisions
+## Out of scope / later
 
-- Location derivation for the observation (WhatsApp pin vs inference-returned vs both).
-- Observation type mapping from the inference response.
-- The handler and inference-server implementations themselves.
+- The inference server implementation and its confirmation model.
+- The write API endpoint changes that wire in the waiter (separate task; reuses the
+  existing `create_citizen_observation`).
+- Optional follow-up: durable session/dedupe for multi-instance; per-type confirmation
+  thresholds.
