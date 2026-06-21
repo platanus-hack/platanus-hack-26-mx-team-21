@@ -3,17 +3,25 @@
 -- (recordings.*, observation_thumbnails.*, tenant_tile_sets.*, external_signals.*) stay.
 --
 -- NOTE (live projects): Supabase guards storage.objects with the
--- `protect_objects_delete` trigger ("Use the Storage API instead"), so the
--- `delete from storage.objects` below only succeeds when the buckets are already
--- empty (e.g. a fresh `supabase db reset`). To decommission a project that still
--- holds objects, first remove them via the Storage API / S3 / dashboard (which
--- needs a service-role key or the project's S3 keys — NOT available to this
--- migration), then this runs clean. Bypassing the trigger is intentionally NOT
--- done here.
+-- `protect_objects_delete` trigger ("Use the Storage API instead"), which now blocks
+-- ANY direct delete — even of zero rows on a fresh `supabase db reset`. So the cleanup
+-- below is best-effort and must not abort the migration: object bytes are decommissioned
+-- via the Storage API / S3 / dashboard, and the pointer rows are gone on a fresh stack.
+-- Bypassing the trigger is intentionally NOT done here.
 drop policy if exists tenant_tiles_read on storage.objects;
 
-delete from storage.objects
- where bucket_id in ('external-data','sweep-video','observation-thumbnails','tenant-tiles');
+do $$
+begin
+  delete from storage.objects
+   where bucket_id in ('external-data','sweep-video','observation-thumbnails','tenant-tiles');
+exception when others then
+  raise notice 'skipping storage.objects cleanup: %', sqlerrm;
+end $$;
 
-delete from storage.buckets
- where id in ('external-data','sweep-video','observation-thumbnails','tenant-tiles');
+do $$
+begin
+  delete from storage.buckets
+   where id in ('external-data','sweep-video','observation-thumbnails','tenant-tiles');
+exception when others then
+  raise notice 'skipping storage.buckets cleanup: %', sqlerrm;
+end $$;

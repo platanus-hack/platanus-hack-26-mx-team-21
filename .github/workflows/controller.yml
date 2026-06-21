@@ -1,0 +1,66 @@
+name: controller
+
+on:
+  pull_request:
+    paths: ["services/whatsapp-controller/**", ".github/workflows/controller.yml"]
+  push:
+    branches: [main]
+    paths: ["services/whatsapp-controller/**", ".github/workflows/controller.yml"]
+
+concurrency:
+  group: controller-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The controller lands via its own PR; if this workflow changes before the code is on
+      # the branch, skip cleanly instead of failing on a missing directory.
+      - id: exists
+        run: |
+          if [ -d services/whatsapp-controller ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "services/whatsapp-controller not present on this ref; skipping."
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.exists.outputs.ok == 'true'
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: services/whatsapp-controller/package-lock.json
+      - if: steps.exists.outputs.ok == 'true'
+        working-directory: services/whatsapp-controller
+        run: npm ci
+      - if: steps.exists.outputs.ok == 'true'
+        working-directory: services/whatsapp-controller
+        run: npm run typecheck
+      - if: steps.exists.outputs.ok == 'true'
+        working-directory: services/whatsapp-controller
+        run: npx tsx scripts/smoke.ts
+
+  deploy:
+    needs: test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Guard Fly token
+        id: guard
+        run: |
+          if [ -z "${{ secrets.FLY_API_TOKEN }}" ]; then
+            echo "FLY_API_TOKEN not set; skipping deploy."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+        if: steps.guard.outputs.skip != 'true'
+      - name: Deploy citycrawl-whatsapp
+        if: steps.guard.outputs.skip != 'true'
+        working-directory: services/whatsapp-controller
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        # --ha=false: keep ONE machine. Sessions/dedupe are in-memory, so a 2nd machine
+        # would split a conversation (photo on A, location on B) and the report never completes.
+        run: flyctl deploy --remote-only --ha=false

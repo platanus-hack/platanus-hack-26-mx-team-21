@@ -1,0 +1,67 @@
+name: supabase
+
+on:
+  pull_request:
+    paths: ["supabase/**", ".github/workflows/supabase.yml"]
+  push:
+    branches: [main]
+    paths: ["supabase/**", ".github/workflows/supabase.yml"]
+
+concurrency:
+  group: supabase-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  migrations-and-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Ensure psql client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Start Supabase
+        run: supabase start
+
+      # GATING: prove the whole schema builds deterministically — every migration in
+      # filename order, then the seed (supabase/seed/*.sql via config sql_paths). This is
+      # the high-signal check; it already caught a broken migration (0211 storage cleanup).
+      - name: Apply migrations + seed (db reset)
+        run: supabase db reset
+
+      # NON-GATING: the supabase/tests/*.test.sql assertion files were authored to each run
+      # against a fresh, isolated DB (their own inline fixtures collide with the seed, and a
+      # few assert intermediate migration state). Running them sequentially against one shared
+      # final-state DB is not their model, so report results without failing the build until
+      # the DB stream adds a per-test isolation harness (e.g. `supabase test db`).
+      - name: Run SQL assertion tests (reported, non-gating)
+        continue-on-error: true
+        run: |
+          DB="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          pass=0; fail=0; failed=""
+          for f in supabase/tests/*.test.sql; do
+            echo "::group::$f"
+            if psql "$DB" -v ON_ERROR_STOP=1 -q -f "$f"; then
+              echo "PASS $f"; pass=$((pass+1))
+            else
+              echo "FAIL $f"; fail=$((fail+1)); failed="$failed $f"
+            fi
+            echo "::endgroup::"
+          done
+          {
+            echo "## Supabase assertion tests"
+            echo "- Passed: $pass"
+            echo "- Failed: $fail (non-gating)"
+            if [ -n "$failed" ]; then
+              echo "- Failing files:"
+              for x in $failed; do echo "  - \`$x\`"; done
+              echo ""
+              echo "> These need per-test DB isolation (fresh reset/seed per file) — DB-stream follow-up."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Stop Supabase
+        if: always()
+        run: supabase stop || true

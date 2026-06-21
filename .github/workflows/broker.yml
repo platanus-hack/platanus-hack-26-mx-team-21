@@ -1,0 +1,33 @@
+name: broker
+
+on:
+  pull_request:
+    paths: ["services/broker/**", ".github/workflows/broker.yml"]
+  push:
+    branches: [main]
+    paths: ["services/broker/**", ".github/workflows/broker.yml"]
+
+concurrency:
+  group: broker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Syntax-check the worker
+        run: python -m py_compile services/broker/src/entry.py
+      - name: Validate wrangler.toml
+        run: |
+          python - <<'PY'
+          import tomllib
+          with open("services/broker/wrangler.toml", "rb") as f:
+              cfg = tomllib.load(f)
+          assert cfg.get("main") == "src/entry.py", "wrangler main must point at src/entry.py"
+          assert cfg.get("name"), "wrangler app name missing"
+          print("wrangler.toml OK:", cfg["name"])
+          PY
