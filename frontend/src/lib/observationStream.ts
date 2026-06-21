@@ -2,7 +2,9 @@
 // sweep (many events sharing sweep_id) collapses to a single aggregated batch toast;
 // a lone event (or one with no sweep_id) becomes a single toast. Kept pure so the
 // grouping logic is unit-tested without Realtime/timers.
+import { useEffect, useRef } from "react";
 import type { ObservationEvent } from "./types";
+import { subscribeNewObservations } from "./observationsRealtime";
 
 export type ToastTarget =
   | { type: "point"; observationId: string; lat: number; lng: number }
@@ -55,4 +57,59 @@ export function groupEvents(
       target: { type: "bounds", points: g.map((e) => ({ lat: e.lat, lng: e.lng })) },
     };
   });
+}
+
+export type Toast = ToastDraft & { id: string };
+
+const FLUSH_MS = 700; // group a sweep's burst before raising toasts / refetching
+
+export interface UseObservationStreamOpts {
+  tenantId: string | null;
+  accessToken: string | null;
+  labelFor: (slug: string) => string;
+  onRefetch: () => void;
+  onToast: (t: Toast) => void;
+}
+
+// Subscribes to the tenant's realtime topic, buffers events for FLUSH_MS, groups
+// them by sweep, raises toasts, and fires ONE authoritative refetch per flush.
+export function useObservationStream(opts: UseObservationStreamOpts): void {
+  const { tenantId, accessToken, labelFor, onRefetch, onToast } = opts;
+
+  // Keep latest callbacks/label in refs so the subscribe effect only re-runs on identity.
+  const labelRef = useRef(labelFor);
+  labelRef.current = labelFor;
+  const refetchRef = useRef(onRefetch);
+  refetchRef.current = onRefetch;
+  const toastRef = useRef(onToast);
+  toastRef.current = onToast;
+  const seq = useRef(0);
+
+  useEffect(() => {
+    if (!tenantId || !accessToken) return;
+
+    let buffer: ObservationEvent[] = [];
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const flush = () => {
+      timer = null;
+      const events = buffer;
+      buffer = [];
+      if (events.length === 0) return;
+      for (const draft of groupEvents(events, labelRef.current)) {
+        toastRef.current({ ...draft, id: `obs-${seq.current++}` });
+      }
+      refetchRef.current(); // authoritative — folds new pins into the map state
+    };
+
+    const unsubscribe = subscribeNewObservations(tenantId, accessToken, (e) => {
+      buffer.push(e);
+      if (timer === null) timer = setTimeout(flush, FLUSH_MS);
+    });
+
+    return () => {
+      if (timer !== null) clearTimeout(timer);
+      unsubscribe();
+    };
+  }, [tenantId, accessToken]);
 }
