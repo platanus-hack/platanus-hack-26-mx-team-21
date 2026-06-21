@@ -22,7 +22,18 @@ export async function fetchObjectUrl(bucket: string, path: string): Promise<stri
       `?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(path)}`;
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) return null;
-    return URL.createObjectURL(await res.blob());
+    const objectUrl = URL.createObjectURL(await res.blob());
+    // Only hand back the URL if the bytes actually decode as an image — corrupt/empty/stub
+    // thumbnails resolve to null so the caller can fall back (e.g. a plain map dot).
+    return await new Promise<string | null>((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve(objectUrl);
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        resolve(null);
+      };
+      img.src = objectUrl;
+    });
   } catch {
     return null;
   }

@@ -46,6 +46,7 @@ export async function getObservations(): Promise<Observation[]> {
     districtName: r.district_name,
     source: r.source,
     thumbPath: r.thumb_path,
+    sweep: r.sweep,
   }));
 }
 

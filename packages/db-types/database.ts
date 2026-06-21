@@ -78,6 +78,7 @@ export type Database = {
           slug: string
           source: string
           state: string
+          sweep: string
           thumb_path: string
           volume: number
           weight: number

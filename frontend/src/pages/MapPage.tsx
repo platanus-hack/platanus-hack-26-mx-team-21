@@ -439,9 +439,10 @@ export function MapPage() {
         showPins={showPins}
         showRois={showRois}
         activeTypes={activeTypes}
+        regionFilter={regionFilter}
         plan={activePlan}
         rois={rois}
-        sweepRoute={sweepRoute}
+        highlightSweep={sweepRoute?.sweep ?? null}
         selectedId={selectedId}
         accent={accent}
         panTarget={panTarget}
