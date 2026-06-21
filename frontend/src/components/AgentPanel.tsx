@@ -1,5 +1,5 @@
-import { useState } from "react";
-import type { PlanResult } from "../lib/types";
+import { useEffect, useRef, useState } from "react";
+import type { ChatMessage, PlanResult } from "../lib/types";
 import { typeUnit } from "../lib/types";
 import { money } from "../lib/money";
 import { volumeColor } from "../lib/geo";
@@ -19,10 +19,10 @@ interface Props {
   plan: PlanResult | null;
   typeLabels: Record<string, string>;
   chips: Chip[];
-  // Parse a natural-language command into a draft and populate the dock. Resolves with
-  // optional parser notes (warnings/unresolved terms) or null when applied cleanly. This is
-  // the agent panel's OWN concern — independent of the dock's "Generar plan" button.
-  onSubmitPrompt?: (prompt: string) => Promise<string | null>;
+  // Send the full conversation to the agent. The handler populates the dock with the merged
+  // draft (independent of the dock's "Generar plan" button) and resolves with the assistant's
+  // Spanish reply for this turn.
+  onChat?: (messages: ChatMessage[]) => Promise<string>;
   onClosePreview: () => void;
   onLocateObs: (id: string) => void;
   onLocateSquad: (lat: number, lng: number) => void;
@@ -46,7 +46,7 @@ export function AgentPanel(props: Props) {
   }
   return (
     <Panel className={SHELL}>
-      <AgentDefault chips={props.chips} onSubmitPrompt={props.onSubmitPrompt} />
+      <AgentDefault chips={props.chips} onChat={props.onChat} />
     </Panel>
   );
 }
@@ -225,29 +225,41 @@ function Empty({ children }: { children: React.ReactNode }) {
 
 // ---- agent default ----------------------------------------------------------
 
+// Greeting shown before the first user turn — static, not sent to the model.
+const INTRO =
+  "¡Hola! Soy tu agente del mapa de prioridades. Dime qué quieres atender y armo un plan: " +
+  "tipo de problema, presupuesto, región (alcaldía) y cuántas cuadrillas. " +
+  'Por ejemplo: "baches en Cuauhtémoc, 2 millones, 3 cuadrillas". Relleno el panel para que ' +
+  "lo revises antes de generar — pídeme ajustes cuando quieras.";
+
 function AgentDefault({
   chips,
-  onSubmitPrompt,
+  onChat,
 }: {
   chips: Chip[];
-  onSubmitPrompt?: (prompt: string) => Promise<string | null>;
+  onChat?: (messages: ChatMessage[]) => Promise<string>;
 }) {
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Keep the conversation pinned to the latest turn.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages, busy]);
 
   const submit = () => {
     const text = prompt.trim();
-    if (!text || busy || !onSubmitPrompt) return;
+    if (!text || busy || !onChat) return;
+    const next: ChatMessage[] = [...messages, { role: "user", content: text }];
+    setMessages(next);
+    setPrompt("");
     setBusy(true);
     setErr(null);
-    setNote(null);
-    onSubmitPrompt(text)
-      .then((n) => {
-        setNote(n ?? "Borrador aplicado al panel. Revisa y genera el plan.");
-        setPrompt("");
-      })
+    onChat(next)
+      .then((reply) => setMessages((m) => [...m, { role: "assistant", content: reply }]))
       .catch((e) => setErr(e instanceof Error ? e.message : String(e)))
       .finally(() => setBusy(false));
   };
@@ -264,42 +276,25 @@ function AgentDefault({
         <div className="leading-[1.15]">
           <div className="text-sm font-extrabold tracking-[-0.2px]">Agente</div>
           <div className="text-[10.5px] font-medium text-muted-foreground">
-            Genera planes de reparación con un clic
+            Conversa para armar tu plan de reparación
           </div>
         </div>
       </div>
 
-      <div className="pp-scroll flex-1 overflow-y-auto px-4 pb-2.5 pt-4">
-        <div className="mb-[13px] flex gap-[9px]">
-          <div className="mt-px size-[22px] shrink-0 rounded-[7px] bg-[linear-gradient(135deg,var(--acc,#2f64e6),#6a4cf0)]" />
-          <div className="flex-1 text-[12.5px] leading-[1.5] text-[#3a4655]">
-            Soy tu agente del mapa de prioridades. Elige un <strong>tipo de problema</strong>, fija
-            el <strong>presupuesto</strong>, acota la <strong>región</strong> y genera un{" "}
-            <strong>plan de acción</strong>: los baches más críticos dentro del presupuesto y las{" "}
-            <strong>cuadrillas</strong> por clúster. Ajusta presupuesto, región o cuadrillas y
-            vuelve a generar el plan.
-          </div>
-        </div>
-        <div className="mb-[13px] flex gap-[9px] opacity-95">
-          <div className="mt-px size-[22px] shrink-0 rounded-[7px] bg-[#e7eaf0]" />
-          <div className="flex-1 text-[12px] leading-[1.5] text-muted-foreground">
-            O descríbelo en lenguaje natural abajo (p. ej. <em>"baches en Cuauhtémoc, 2 millones,
-            3 cuadrillas"</em>). Lo interpreto y relleno el panel para que lo revises antes de generar.
-          </div>
-        </div>
+      <div ref={scrollRef} className="pp-scroll flex flex-1 flex-col gap-3 overflow-y-auto px-4 pb-2.5 pt-4">
+        <Bubble role="assistant">{INTRO}</Bubble>
+        {messages.map((m, i) => (
+          <Bubble key={i} role={m.role}>
+            {m.content}
+          </Bubble>
+        ))}
+        {busy && <Typing />}
       </div>
 
       <div className="border-t border-[var(--line-2)] bg-white/60 px-3 pb-3 pt-2.5">
-        {(note || err) && (
-          <div
-            className="mb-[9px] rounded-lg border px-[9px] py-1.5 font-mono text-[10.5px] leading-[1.4]"
-            style={{
-              background: err ? "#fdeceb" : "#eef4ff",
-              borderColor: err ? "#f6d4d2" : "#dbe6ff",
-              color: err ? "#c2333a" : "#3a4655",
-            }}
-          >
-            {err ? `No pude interpretarlo: ${err}` : note}
+        {err && (
+          <div className="mb-[9px] rounded-lg border border-[#f6d4d2] bg-[#fdeceb] px-[9px] py-1.5 font-mono text-[10.5px] leading-[1.4] text-[#c2333a]">
+            No pude responder: {err}
           </div>
         )}
         <div className="mb-[9px] flex flex-wrap gap-1.5">
@@ -324,15 +319,15 @@ function AgentDefault({
                 submit();
               }
             }}
-            disabled={busy || !onSubmitPrompt}
-            placeholder="Describe un plan en lenguaje natural…"
+            disabled={busy || !onChat}
+            placeholder="Escribe un mensaje…"
             className="h-auto min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-[13px] shadow-none focus-visible:ring-0 md:text-[13px]"
           />
           <Button
             onClick={submit}
-            disabled={busy || !prompt.trim() || !onSubmitPrompt}
+            disabled={busy || !prompt.trim() || !onChat}
             size="icon"
-            title="Interpretar"
+            title="Enviar"
             className="size-[34px] shrink-0 rounded-[9px]"
           >
             {busy ? (
@@ -346,5 +341,45 @@ function AgentDefault({
         </div>
       </div>
     </>
+  );
+}
+
+// A single conversation turn. Assistant bubbles sit left with the gradient avatar; the user's
+// own messages sit right in the accent color.
+function Bubble({ role, children }: { role: "user" | "assistant"; children: React.ReactNode }) {
+  if (role === "user") {
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-[82%] whitespace-pre-wrap rounded-[12px] rounded-br-[4px] bg-[var(--acc,#2f64e6)] px-3 py-2 text-[12.5px] leading-[1.45] text-white">
+          {children}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex gap-[9px]">
+      <div className="mt-px size-[22px] shrink-0 rounded-[7px] bg-[linear-gradient(135deg,var(--acc,#2f64e6),#6a4cf0)]" />
+      <div className="max-w-[82%] whitespace-pre-wrap rounded-[12px] rounded-tl-[4px] border border-[var(--line-2)] bg-[#fbfcfe] px-3 py-2 text-[12.5px] leading-[1.5] text-[#3a4655]">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// Three-dot "thinking" indicator shown while the agent's turn is in flight.
+function Typing() {
+  return (
+    <div className="flex gap-[9px]">
+      <div className="mt-px size-[22px] shrink-0 rounded-[7px] bg-[linear-gradient(135deg,var(--acc,#2f64e6),#6a4cf0)]" />
+      <div className="flex items-center gap-1 rounded-[12px] rounded-tl-[4px] border border-[var(--line-2)] bg-[#fbfcfe] px-3 py-2.5">
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            className="size-1.5 animate-bounce rounded-full bg-[#aab2bd]"
+            style={{ animationDelay: `${i * 0.15}s` }}
+          />
+        ))}
+      </div>
+    </div>
   );
 }

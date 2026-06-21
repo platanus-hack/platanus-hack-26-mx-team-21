@@ -294,7 +294,7 @@ export function AnalysisDock(props: Props) {
               {props.generating ? (
                 <Spinner size={14} className="border-white/50 border-t-white" />
               ) : (
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                <svg width="15" height="15" viewBox="0 -2.5 24 24" fill="none">
                   <path d="M12 3l1.6 4.8L18 9.4l-4.4 1.6L12 16l-1.6-5L6 9.4l4.4-1.6L12 3z" fill="#fff" />
                 </svg>
               )}

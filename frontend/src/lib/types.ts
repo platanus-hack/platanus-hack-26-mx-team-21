@@ -214,6 +214,18 @@ export interface PlanDraft {
   warnings: string[];
 }
 
+// One turn in the agent conversation. The full history is sent to /v1/llm/chat each turn.
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+// Response from /v1/llm/chat: the assistant's Spanish reply plus the full, merged draft.
+export interface DraftChatResponse {
+  reply: string;
+  draft: PlanDraft;
+}
+
 export interface TopCritical {
   id: string;
   slug: string;

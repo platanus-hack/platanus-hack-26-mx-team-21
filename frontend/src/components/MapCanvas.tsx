@@ -2,7 +2,6 @@ import { memo, useEffect, useRef } from "react";
 import L from "leaflet";
 import type { Observation, PlanResult, Roi } from "../lib/types";
 import { volumeColor } from "../lib/geo";
-import { riskLabel } from "../lib/analysis";
 
 interface Props {
   observations: Observation[];
@@ -36,20 +35,6 @@ export const MapCanvas = memo(function MapCanvas(props: Props) {
   const regionFitRef = useRef<string>("");
   const onSelectRef = useRef(props.onSelect);
   onSelectRef.current = props.onSelect;
-  const showRoisRef = useRef(props.showRois);
-  showRoisRef.current = props.showRois;
-
-  // Keep the ROI label layer attached whenever the ROI toggle is on. Individual
-  // labels are added to this group only while their zone is hovered (see below),
-  // so the group itself can stay on the map without cluttering it.
-  const syncRoiLabels = () => {
-    const map = mapRef.current;
-    const labels = groups.current.roiLabels;
-    if (!map || !labels) return;
-    const visible = showRoisRef.current;
-    if (visible && !map.hasLayer(labels)) labels.addTo(map);
-    else if (!visible && map.hasLayer(labels)) map.removeLayer(labels);
-  };
 
   // ---- init once ----------------------------------------------------------
   useEffect(() => {
@@ -71,7 +56,6 @@ export const MapCanvas = memo(function MapCanvas(props: Props) {
     groups.current = {
       boundary: L.layerGroup().addTo(map),
       rois: L.layerGroup().addTo(map),
-      roiLabels: L.layerGroup(), // added/removed by zoom, see syncRoiLabels
       pins: L.layerGroup().addTo(map),
       pulse: L.layerGroup().addTo(map),
       photos: L.layerGroup().addTo(map), // citizen-report thumbnail markers (WhatsApp photos)
@@ -107,31 +91,16 @@ export const MapCanvas = memo(function MapCanvas(props: Props) {
   }, [props.boundary]);
 
   // ---- risk-ROIs (external dataset) — toggleable standalone layer ----------
-  // Polygons live in the `rois` group; each polygon's label lives in `roiLabels`
-  // and is only shown while the cursor is over that zone (mouseover/mouseout),
-  // so labels never clutter the map until the user points at a specific zone.
+  // Just the dashed red polygons; no labels.
   useEffect(() => {
     const g = groups.current.rois;
-    const gl = groups.current.roiLabels;
-    if (!g || !gl) return;
+    if (!g) return;
     g.clearLayers();
-    gl.clearLayers();
-    if (!props.showRois) {
-      syncRoiLabels();
-      return;
-    }
+    if (!props.showRois) return;
     for (const roi of props.rois) {
-      const label = L.marker([roi.lat, roi.lng], {
-        interactive: false,
-        icon: L.divIcon({
-          className: "",
-          html: `<div style="background:#fff;color:#c2333a;font:600 9.5px IBM Plex Mono,monospace;padding:2px 7px;border-radius:6px;white-space:nowrap;border:1px solid #f4cdcd;box-shadow:0 3px 9px -3px rgba(197,51,58,.4);transform:translate(-50%,-50%);">${riskLabel(roi.riskDimension)}</div>`,
-          iconSize: [0, 0],
-        }),
-      });
       try {
         L.geoJSON({ type: "Feature", geometry: roi.geojson, properties: {} } as never, {
-          interactive: true,
+          interactive: false,
           style: {
             color: "#e5484d",
             weight: 1.6,
@@ -141,15 +110,11 @@ export const MapCanvas = memo(function MapCanvas(props: Props) {
             fillColor: "#e5484d",
             fillOpacity: 0.06,
           },
-        })
-          .on("mouseover", () => label.addTo(gl))
-          .on("mouseout", () => gl.removeLayer(label))
-          .addTo(g);
+        }).addTo(g);
       } catch {
         /* ignore */
       }
     }
-    syncRoiLabels();
   }, [props.rois, props.showRois]);
 
   // ---- pins — fixed size, colored by volume metadata only -----------------
