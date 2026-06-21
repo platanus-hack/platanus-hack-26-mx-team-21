@@ -33,6 +33,13 @@
   --font-mono: var(--font-mono);
 }
 
+/* shadcn primitives use a bare `border` utility and inherit this semantic color. */
+@layer base {
+  * {
+    @apply border-border;
+  }
+}
+
 /* ===== preserved globals — feature components depend on these, do not remove ===== */
 :root {
   --acc: var(--brand);
