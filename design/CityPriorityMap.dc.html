@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{font-family:'Public Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+  .leaflet-container{background:#eef1f5;font-family:'Public Sans',sans-serif;}
+  .leaflet-bar a, .leaflet-control-attribution{font-family:'Public Sans',sans-serif;}
+  .pp-scroll::-webkit-scrollbar{width:8px;height:8px;}
+  .pp-scroll::-webkit-scrollbar-thumb{background:#d4d9e0;border-radius:8px;}
+  .pp-scroll::-webkit-scrollbar-track{background:transparent;}
+  input[type=range]{-webkit-appearance:none;appearance:none;height:4px;border-radius:4px;background:#e3e7ee;outline:none;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;border-radius:50%;background:#fff;border:3px solid var(--acc,#2f64e6);cursor:pointer;box-shadow:0 1px 3px rgba(20,30,50,.25);}
+  @keyframes ppspin{to{transform:rotate(360deg);}}
+  @keyframes pppulse{0%,100%{opacity:.55;}50%{opacity:1;}}
+  @keyframes ppin{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+  @keyframes ppup{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
+</style>
+</helmet>
+<div style="position:fixed;inset:0;background:#eef1f5;color:#1b2430;overflow:hidden;">
+
+  <div ref="{{ mapRef }}" style="position:absolute;inset:0;z-index:0;"></div>
+
+  <!-- ============ LAYERS PANEL ============ -->
+  <aside style="position:absolute;top:18px;left:18px;z-index:500;width:236px;background:rgba(255,255,255,.9);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(230,233,238,.9);border-radius:16px;box-shadow:0 18px 44px -26px rgba(20,30,50,.42),0 2px 6px -3px rgba(20,30,50,.12);overflow:hidden;">
+    <div style="padding:13px 14px;border-bottom:1px solid #eef0f4;display:flex;align-items:center;gap:10px;">
+      <div style="width:30px;height:30px;border-radius:8px;background:#1b2430;display:flex;align-items:center;justify-content:center;flex:none;">
+        <div style="width:12px;height:12px;border:2.5px solid #fff;border-radius:50%;position:relative;"><div style="position:absolute;width:3.5px;height:3.5px;background:#fff;border-radius:50%;top:50%;left:50%;transform:translate(-50%,-50%);"></div></div>
+      </div>
+      <div style="line-height:1.12;min-width:0;">
+        <div style="font-size:13.5px;font-weight:800;letter-spacing:-.2px;">Vialia</div>
+        <div style="font-size:10px;color:#9aa3b1;font-weight:500;">CDMX · Priority map</div>
+      </div>
+      <div style="margin-left:auto;text-align:right;">
+        <div style="display:flex;align-items:center;justify-content:flex-end;gap:5px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#30a46c;font-weight:600;"><span style="width:6px;height:6px;border-radius:50%;background:#30a46c;animation:pppulse 1.8s infinite;"></span>LIVE</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:#b3bac5;margin-top:2px;">{{ lastSweep }}</div>
+      </div>
+    </div>
+
+    <div style="padding:12px 14px 14px;">
+      <div style="font-size:10px;letter-spacing:.7px;font-weight:700;color:#8a94a3;text-transform:uppercase;margin-bottom:8px;">Layers</div>
+      <button onClick="{{ togglePins }}" style="{{ pinRowStyle }}">
+        <span style="{{ pinBoxStyle }}">{{ pinCheck }}</span>
+        <span style="flex:1;text-align:left;font-size:12.5px;font-weight:600;">Instances</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#9aa3b1;">{{ totalObs }}</span>
+      </button>
+      <button onClick="{{ toggleHeat }}" style="{{ heatRowStyle }}">
+        <span style="{{ heatBoxStyle }}">{{ heatCheck }}</span>
+        <span style="flex:1;text-align:left;font-size:12.5px;font-weight:600;">Priority heat</span>
+        <span style="width:34px;height:9px;border-radius:5px;background:linear-gradient(90deg,#30a46c,#f5a623,#e5484d);"></span>
+      </button>
+
+      <div style="height:1px;background:#eef0f4;margin:11px 0 9px;"></div>
+      <div style="font-size:10px;letter-spacing:.7px;font-weight:700;color:#8a94a3;text-transform:uppercase;margin-bottom:5px;">Observation types</div>
+      <sc-for list="{{ typeList }}" as="t" hint-placeholder-count="5">
+        <button onClick="{{ t.toggle }}" style="{{ t.rowStyle }}">
+          <span style="{{ t.dotStyle }}"></span>
+          <span style="flex:1;text-align:left;font-size:12px;font-weight:600;color:{{ t.nameColor }};display:flex;align-items:center;gap:5px;">{{ t.label }}<sc-if value="{{ t.isLatent }}" hint-placeholder-val="{{ false }}"><span style="font-family:'IBM Plex Mono',monospace;font-size:8px;font-weight:600;color:#7c3aed;background:#f4eeff;border-radius:4px;padding:1px 4px;">LATENT</span></sc-if></span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#aab2bd;">{{ t.count }}</span>
+        </button>
+      </sc-for>
+
+      <div style="height:1px;background:#eef0f4;margin:11px 0 9px;"></div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:10.5px;color:#7a8493;">
+        <span style="width:10px;height:10px;border-radius:50%;background:#fff;border:1.5px dashed #b3bac5;flex:none;"></span>Priority pending — off heat &amp; analysis
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ AGENT PANEL (chat) ============ -->
+  <aside style="position:absolute;top:18px;right:18px;bottom:18px;width:368px;z-index:510;background:rgba(255,255,255,.93);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(230,233,238,.9);border-radius:18px;box-shadow:0 26px 64px -32px rgba(20,30,50,.5);display:flex;flex-direction:column;overflow:hidden;">
+
+    <!-- ===== SWEEP PREVIEW (replaces agent surface) ===== -->
+    <sc-if value="{{ sweepShow }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-direction:column;flex:1;min-height:0;animation:ppin .2s ease;">
+      <div style="padding:12px 14px;border-bottom:1px solid #eef0f4;display:flex;align-items:center;gap:10px;">
+        <button onClick="{{ closeSweep }}" title="Back to agent" style="width:30px;height:30px;border-radius:8px;border:none;background:#f1f4f8;color:#5b6675;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="#5b6675" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <div style="line-height:1.15;min-width:0;flex:1;"><div style="font-size:14px;font-weight:800;letter-spacing:-.2px;">Sweep preview</div><div style="font-size:10.5px;color:#9aa3b1;font-family:'IBM Plex Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ sw.id }} · captured {{ sw.ago }}</div></div>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:600;letter-spacing:.4px;color:#e5484d;background:#fdeceb;border:1px solid #f8d8d6;border-radius:5px;padding:2px 7px;flex:none;">{{ sw.detCount }} DET</span>
+      </div>
+      <div class="pp-scroll" style="flex:1;overflow-y:auto;padding:14px 14px 16px;">
+        <div style="position:relative;width:100%;aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:#10151c;border:1px solid #1c2530;">
+          <div style="position:absolute;inset:0;background:repeating-linear-gradient(45deg,#161c25,#161c25 9px,#1a2230 9px,#1a2230 18px);"></div>
+          <div style="position:absolute;left:0;right:0;top:61%;height:1px;background:rgba(255,255,255,.07);"></div>
+          <sc-for list="{{ sw.active }}" as="b" hint-placeholder-count="0">
+            <div style="{{ b.boxStyle }}"><div style="position:absolute;top:-15px;left:-1px;font-family:'IBM Plex Mono',monospace;font-size:8px;font-weight:600;color:#fff;background:{{ b.color }};padding:1px 4px;border-radius:3px;white-space:nowrap;">{{ b.label }} {{ b.conf }}%</div></div>
+          </sc-for>
+          <div style="position:absolute;top:8px;left:9px;right:9px;display:flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:rgba(255,255,255,.82);"><span style="width:6px;height:6px;border-radius:50%;background:#e5484d;animation:pppulse 1.4s infinite;"></span><span>{{ sw.id }}</span><span style="margin-left:auto;">{{ sw.frameNo }}</span></div>
+          <div style="position:absolute;bottom:8px;left:9px;font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:rgba(255,255,255,.62);">cdmx-vision v2.3.1</div>
+          <div style="position:absolute;bottom:8px;right:9px;font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:rgba(255,255,255,.82);">{{ sw.tFmt }} / {{ sw.durFmt }}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:11px;margin-top:11px;">
+          <button onClick="{{ toggleSweepPlay }}" style="width:38px;height:38px;border-radius:10px;border:none;background:var(--acc,#2f64e6);cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none;"><sc-if value="{{ sweepPlaying }}" hint-placeholder-val="{{ false }}"><svg width="15" height="15" viewBox="0 0 24 24" fill="#fff"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></sc-if><sc-if value="{{ sweepPaused }}" hint-placeholder-val="{{ true }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="#fff"><path d="M7 5l12 7-12 7V5z"/></svg></sc-if></button>
+          <div style="flex:1;min-width:0;">
+            <div style="position:relative;height:18px;display:flex;align-items:center;">
+              <input type="range" min="0" max="{{ sw.dur }}" step="0.1" value="{{ sw.t }}" onChange="{{ onSweepSeek }}" style="width:100%;position:relative;z-index:2;" />
+              <div style="position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);height:8px;pointer-events:none;z-index:1;"><sc-for list="{{ sw.ticks }}" as="k" hint-placeholder-count="0"><span style="position:absolute;top:0;width:3px;height:8px;border-radius:2px;left:{{ k.left }};background:{{ k.color }};"></span></sc-for></div>
+            </div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:13px;">
+          <div style="background:#f7f9fc;border:1px solid #eef0f4;border-radius:10px;padding:9px 11px;"><div style="font-size:9.5px;color:#9aa3b1;font-weight:600;text-transform:uppercase;letter-spacing:.4px;">Captured</div><div style="font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;margin-top:3px;">{{ sw.ago }}</div></div>
+          <div style="background:#f7f9fc;border:1px solid #eef0f4;border-radius:10px;padding:9px 11px;"><div style="font-size:9.5px;color:#9aa3b1;font-weight:600;text-transform:uppercase;letter-spacing:.4px;">Detections</div><div style="font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;margin-top:3px;">{{ sw.detCount }}</div></div>
+          <div style="background:#f7f9fc;border:1px solid #eef0f4;border-radius:10px;padding:9px 11px;"><div style="font-size:9.5px;color:#9aa3b1;font-weight:600;text-transform:uppercase;letter-spacing:.4px;">Route length</div><div style="font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;margin-top:3px;">{{ sw.distance }}</div></div>
+          <div style="background:#f7f9fc;border:1px solid #eef0f4;border-radius:10px;padding:9px 11px;"><div style="font-size:9.5px;color:#9aa3b1;font-weight:600;text-transform:uppercase;letter-spacing:.4px;">Duration</div><div style="font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;margin-top:3px;">{{ sw.durFmt }}</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:9px;margin-top:8px;padding:9px 11px;background:#fbfcfe;border:1px solid #eef0f4;border-radius:10px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex:none;"><path d="M3 13l2-5a2 2 0 012-1.4h10A2 2 0 0119 8l2 5v5h-3M3 18v-5m0 5h3m12 0H6m0 0H6" stroke="#9aa3b1" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7.5" cy="18" r="1.6" stroke="#9aa3b1" stroke-width="1.7"/><circle cx="16.5" cy="18" r="1.6" stroke="#9aa3b1" stroke-width="1.7"/></svg>
+          <div style="min-width:0;"><div style="font-size:11.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ sw.operator }}</div><div style="font-size:10px;color:#9aa3b1;font-family:'IBM Plex Mono',monospace;">{{ sw.vehicle }}</div></div>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:8px;margin:15px 0 7px;"><span style="font-size:10px;letter-spacing:.5px;font-weight:700;color:#8a94a3;text-transform:uppercase;">Detections in this sweep</span><span style="font-size:10px;color:#b3bac5;">click to seek</span></div>
+        <sc-for list="{{ sw.detList }}" as="d" hint-placeholder-count="4">
+          <button onClick="{{ d.seek }}" style="{{ d.rowStyle }}"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#7a8493;min-width:32px;text-align:right;">{{ d.timeFmt }}</span><span style="width:9px;height:9px;border-radius:50%;background:{{ d.color }};flex:none;"></span><span style="flex:1;min-width:0;text-align:left;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ d.label }}</span><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#9aa3b1;">{{ d.id }}</span><sc-if value="{{ d.isNow }}" hint-placeholder-val="{{ false }}"><span style="width:6px;height:6px;border-radius:50%;background:var(--acc,#2f64e6);flex:none;"></span></sc-if></button>
+        </sc-for>
+      </div>
+    </div>
+    </sc-if>
+
+    <!-- ===== AGENT (chat) ===== -->
+    <sc-if value="{{ agentShow }}" hint-placeholder-val="{{ true }}">
+    <div style="display:flex;flex-direction:column;flex:1;min-height:0;">
+    <div style="padding:14px 16px;border-bottom:1px solid #eef0f4;display:flex;align-items:center;gap:10px;">
+      <div style="width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--acc,#2f64e6),#6a4cf0);display:flex;align-items:center;justify-content:center;flex:none;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 3l1.6 4.8L18 9.4l-4.4 1.6L12 16l-1.6-5L6 9.4l4.4-1.6L12 3z" fill="#fff"/><circle cx="18.5" cy="5.5" r="1.4" fill="#fff"/></svg>
+      </div>
+      <div style="line-height:1.15;">
+        <div style="font-size:14px;font-weight:800;letter-spacing:-.2px;">Agent</div>
+        <div style="font-size:10.5px;color:#9aa3b1;font-weight:500;">Plan repairs in natural language</div>
+      </div>
+    </div>
+
+    <div class="pp-scroll" ref="{{ feedRef }}" style="flex:1;overflow-y:auto;padding:16px 16px 10px;">
+      <sc-for list="{{ feed }}" as="m" hint-placeholder-count="2">
+
+        <sc-if value="{{ m.isUser }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;justify-content:flex-end;margin-bottom:13px;"><div style="max-width:85%;background:#eef3ff;border:1px solid #dde6ff;color:#22324f;border-radius:13px 13px 4px 13px;padding:8px 12px;font-size:12.5px;line-height:1.45;">{{ m.text }}</div></div>
+        </sc-if>
+
+        <sc-if value="{{ m.isText }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;gap:9px;margin-bottom:13px;">
+            <div style="width:22px;height:22px;border-radius:7px;background:linear-gradient(135deg,var(--acc,#2f64e6),#6a4cf0);flex:none;margin-top:1px;"></div>
+            <div style="flex:1;font-size:12.5px;line-height:1.5;color:#3a4655;">{{ m.text }}</div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ m.isCard }}" hint-placeholder-val="{{ false }}">
+          <div onClick="{{ m.openView }}" style="margin-bottom:13px;border:1px solid #e6e9ee;border-radius:13px;background:#fff;overflow:hidden;box-shadow:0 5px 16px -14px rgba(20,30,50,.4);cursor:pointer;">
+            <div style="padding:10px 12px;display:flex;align-items:center;gap:8px;">
+              <span style="font-size:10px;font-weight:700;color:{{ m.badgeColor }};background:{{ m.badgeBg }};border-radius:5px;padding:2px 7px;">{{ m.badgeId }}</span>
+              <span style="font-size:12.5px;font-weight:700;flex:1;min-width:0;">{{ m.title }}</span>
+              <span style="{{ m.statusStyle }}">{{ m.statusLabel }}</span>
+            </div>
+            <div style="padding:0 12px 11px;">
+              <div style="font-size:10.5px;color:#8a94a3;font-family:'IBM Plex Mono',monospace;line-height:1.4;">{{ m.subline }}</div>
+              <sc-if value="{{ m.pendingRun }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;align-items:center;gap:8px;margin-top:9px;font-size:11px;color:#8a94a3;"><span style="width:13px;height:13px;border:2px solid #e3e7ee;border-top-color:{{ m.badgeColor }};border-radius:50%;animation:ppspin .7s linear infinite;display:inline-block;"></span>{{ m.runningText }}</div>
+              </sc-if>
+              <sc-if value="{{ m.hasResult }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;gap:8px;margin-top:10px;">
+                  <sc-for list="{{ m.summary }}" as="s" hint-placeholder-count="2">
+                    <div style="flex:1;background:#f7f9fc;border:1px solid #eef0f4;border-radius:9px;padding:7px 9px;">
+                      <div style="font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:600;letter-spacing:-.4px;line-height:1;">{{ s.v }}</div>
+                      <div style="font-size:9.5px;color:#9aa3b1;font-weight:500;margin-top:4px;">{{ s.l }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="margin-top:9px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:11px;font-weight:700;color:#2b3852;">Open in analysis view<svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M7 17 17 7M9 7h8v8" stroke="#2b3852" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+              </sc-if>
+            </div>
+          </div>
+        </sc-if>
+
+      </sc-for>
+    </div>
+
+    <div style="border-top:1px solid #eef0f4;padding:10px 12px 12px;background:rgba(255,255,255,.6);">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px;">
+        <sc-for list="{{ chips }}" as="c" hint-placeholder-count="3"><button onClick="{{ c.run }}" style="background:#f4f6f9;border:1px solid #e6e9ee;border-radius:16px;padding:5px 10px;font-size:10.5px;font-weight:500;color:#41506a;cursor:pointer;white-space:nowrap;">{{ c.label }}</button></sc-for>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #e3e7ee;border-radius:12px;padding:5px 5px 5px 13px;box-shadow:0 1px 3px rgba(20,30,50,.05);">
+        <input value="{{ command }}" onChange="{{ onCommandChange }}" onKeyDown="{{ onCommandKey }}" placeholder="Describe an analysis…" style="flex:1;border:none;outline:none;font-family:'Public Sans',sans-serif;font-size:13px;background:none;min-width:0;" />
+        <button onClick="{{ runCommand }}" style="flex:none;background:var(--acc,#2f64e6);color:#fff;border:none;border-radius:9px;width:34px;height:34px;cursor:pointer;display:flex;align-items:center;justify-content:center;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12h13M13 6l6 6-6 6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </div>
+    </div>
+    </sc-if>
+  </aside>
+
+  <!-- ============ LAUNCHER (when no analysis open) ============ -->
+  <sc-if value="{{ launcherShow }}" hint-placeholder-val="{{ true }}">
+    <div style="position:absolute;left:18px;right:404px;bottom:20px;z-index:520;display:flex;justify-content:center;pointer-events:none;">
+      <div style="pointer-events:auto;display:flex;align-items:center;gap:4px;background:#fff;border:1px solid #e3e7ee;border-radius:13px;padding:5px;box-shadow:0 16px 40px -20px rgba(20,30,50,.5),0 2px 6px -3px rgba(20,30,50,.18);">
+        <button onClick="{{ newAnalysis }}" style="display:flex;align-items:center;gap:7px;background:var(--acc,#2f64e6);color:#fff;border:none;border-radius:9px;height:36px;padding:0 14px;font-family:'Public Sans',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>New analysis
+        </button>
+        <sc-if value="{{ hasRuns }}" hint-placeholder-val="{{ false }}">
+          <button onClick="{{ toggleHist }}" title="Past analyses" style="display:flex;align-items:center;justify-content:center;background:none;border:none;border-radius:9px;width:36px;height:36px;color:#9aa3b1;cursor:pointer;">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 8v4l3 2" stroke="#8a94a3" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.5 12a8.5 8.5 0 1 0 2.4-5.9M3.5 4v3h3" stroke="#8a94a3" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </sc-if>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ ANALYSIS DOCK (non-modal, map stays interactive) ============ -->
+  <sc-if value="{{ drawerShow }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;left:18px;right:404px;bottom:18px;z-index:521;background:rgba(255,255,255,.96);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(230,233,238,.95);border-radius:16px;box-shadow:0 28px 70px -34px rgba(20,30,50,.55);display:flex;flex-direction:column;max-height:332px;overflow:hidden;animation:ppup .2s ease;">
+
+      <div style="padding:11px 14px;display:flex;align-items:center;gap:11px;{{ drawerHeadBorder }}">
+        <div style="width:30px;height:30px;border-radius:9px;background:{{ dv.hdr }};display:flex;align-items:center;justify-content:center;flex:none;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div style="min-width:0;flex:1;">
+          <div style="font-size:13.5px;font-weight:800;letter-spacing:-.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ dv.title }}</div>
+          <div style="font-size:10.5px;color:#9aa3b1;font-family:'IBM Plex Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ dv.sub }}</div>
+        </div>
+        <span style="{{ dv.statusStyle }}">{{ dv.statusLabel }}</span>
+        <sc-if value="{{ hasRuns }}" hint-placeholder-val="{{ false }}"><button onClick="{{ toggleHist }}" title="Past analyses" style="display:flex;align-items:center;justify-content:center;background:none;border:none;border-radius:8px;width:30px;height:30px;color:#9aa3b1;cursor:pointer;flex:none;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 8v4l3 2" stroke="#8a94a3" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.5 12a8.5 8.5 0 1 0 2.4-5.9M3.5 4v3h3" stroke="#8a94a3" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button></sc-if>
+        <button onClick="{{ toggleMin }}" title="Collapse" style="display:flex;align-items:center;justify-content:center;background:#f1f4f8;border:none;border-radius:8px;width:30px;height:30px;color:#5b6675;cursor:pointer;flex:none;">
+          <sc-if value="{{ drawerExpanded }}" hint-placeholder-val="{{ true }}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M6 14l6 6 6-6M6 4l6 6 6-6" stroke="#5b6675" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></sc-if>
+          <sc-if value="{{ drawerCollapsed }}" hint-placeholder-val="{{ false }}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M6 10l6-6 6 6M6 20l6-6 6 6" stroke="#5b6675" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></sc-if>
+        </button>
+        <button onClick="{{ closeDrawer }}" style="border:none;background:#f1f4f8;width:30px;height:30px;border-radius:8px;cursor:pointer;color:#5b6675;font-size:16px;line-height:1;flex:none;">×</button>
+      </div>
+
+      <sc-if value="{{ drawerExpanded }}" hint-placeholder-val="{{ true }}">
+
+        <sc-if value="{{ dv.showControls }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:9px 14px;display:flex;align-items:center;gap:13px;border-bottom:1px solid #f3f5f8;position:relative;">
+            <div style="display:flex;background:#eef1f5;border-radius:9px;padding:3px;gap:3px;flex:none;">
+              <button onClick="{{ setKindRoute }}" style="{{ kindRouteStyle }}">Route</button>
+              <button onClick="{{ setKindCluster }}" style="{{ kindClusterStyle }}">Group</button>
+            </div>
+            <div style="flex:1;min-width:130px;display:flex;align-items:center;gap:10px;">
+              <span style="font-size:10px;font-weight:700;color:#8a94a3;text-transform:uppercase;letter-spacing:.4px;flex:none;">Budget</span>
+              <input type="range" min="500000" max="20000000" step="250000" value="{{ dv.budget }}" onChange="{{ onBudget }}" style="flex:1;min-width:60px;" />
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;flex:none;min-width:62px;text-align:right;">{{ dv.budgetFmt }}</span>
+            </div>
+            <button onClick="{{ toggleCost }}" style="{{ costBtnStyle }}">Cost basis</button>
+            <sc-if value="{{ costOpen }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;right:14px;bottom:46px;width:288px;background:#fff;border:1px solid #e6e9ee;border-radius:12px;box-shadow:0 22px 54px -26px rgba(20,30,50,.55);z-index:6;overflow:hidden;">
+                <div style="padding:9px 13px;border-bottom:1px solid #f3f5f8;display:flex;align-items:center;justify-content:space-between;"><span style="font-size:10px;letter-spacing:.5px;font-weight:700;color:#7a8493;text-transform:uppercase;">Unit cost basis</span><span style="font-size:9.5px;color:#aab2bd;">updates live</span></div>
+                <div style="padding:3px 13px 8px;">
+                  <sc-for list="{{ costList }}" as="c" hint-placeholder-count="4">
+                    <div style="display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid #f5f7fa;">
+                      <span style="width:8px;height:8px;border-radius:50%;background:{{ c.color }};flex:none;"></span>
+                      <span style="flex:1;font-size:12px;font-weight:600;color:#3a4655;">{{ c.label }}</span>
+                      <div style="display:flex;align-items:center;background:#fff;border:1px solid #e6e9ee;border-radius:7px;">
+                        <button onClick="{{ c.dec }}" style="width:24px;height:26px;border:none;background:none;color:#5b6675;font-size:15px;cursor:pointer;line-height:1;">−</button>
+                        <div style="min-width:56px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;">{{ c.costFmt }}</div>
+                        <button onClick="{{ c.inc }}" style="width:24px;height:26px;border:none;background:none;color:#5b6675;font-size:15px;cursor:pointer;line-height:1;">+</button>
+                      </div>
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#b3bac5;min-width:30px;">/{{ c.unit }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <div class="pp-scroll" style="overflow-y:auto;padding:13px 14px 14px;">
+          <sc-if value="{{ dv.running }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;align-items:center;justify-content:center;gap:11px;padding:34px 0;color:#8a94a3;font-size:12.5px;"><span style="width:22px;height:22px;border:3px solid #e3e7ee;border-top-color:{{ dv.hdr }};border-radius:50%;animation:ppspin .7s linear infinite;display:inline-block;"></span>{{ dv.runningText }}</div>
+          </sc-if>
+
+          <sc-if value="{{ dv.hasResult }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;gap:9px;">
+              <sc-for list="{{ dv.stats }}" as="s" hint-placeholder-count="4">
+                <div style="flex:1;min-width:0;background:{{ s.bg }};border:1px solid {{ s.border }};border-radius:11px;padding:10px 12px;">
+                  <div style="font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:600;color:{{ s.color }};letter-spacing:-.5px;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ s.value }}</div>
+                  <div style="font-size:10px;color:#8a94a3;font-weight:500;margin-top:6px;line-height:1.25;">{{ s.label }}</div>
+                </div>
+              </sc-for>
+            </div>
+
+            <div style="display:flex;align-items:baseline;gap:8px;margin:15px 0 4px;"><span style="font-size:10px;letter-spacing:.5px;font-weight:700;color:#8a94a3;text-transform:uppercase;">{{ dv.listTitle }}</span><span style="font-size:10px;color:#b3bac5;">click to locate</span></div>
+            <sc-if value="{{ dv.isLatent }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#aab2bd;line-height:1.4;margin-bottom:8px;">{{ dv.listNote }}</div></sc-if>
+            <div class="pp-scroll" style="display:grid;grid-auto-flow:column;grid-template-rows:1fr 1fr;gap:8px;overflow-x:auto;padding-bottom:6px;">
+              <sc-for list="{{ dv.items }}" as="it" hint-placeholder-count="8">
+                <div onClick="{{ it.onClick }}" style="display:flex;align-items:center;gap:9px;width:218px;padding:8px 10px;border:1px solid #eef0f4;border-radius:10px;background:#fbfcfe;cursor:pointer;">
+                  <div style="width:24px;height:24px;border-radius:7px;background:{{ it.badgeBg }};color:{{ it.badgeColor }};font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:none;">{{ it.badge }}</div>
+                  <div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:600;letter-spacing:-.1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ it.label }}</div><div style="font-size:9.5px;color:#9aa3b1;font-family:'IBM Plex Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ it.meta }}</div></div>
+                  <span style="width:8px;height:8px;border-radius:50%;background:{{ it.dot }};flex:none;"></span>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <!-- ============ PAST ANALYSES POPOVER ============ -->
+  <sc-if value="{{ histOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;left:18px;right:404px;bottom:{{ histBottom }};z-index:540;display:flex;justify-content:center;pointer-events:none;">
+      <div style="pointer-events:auto;width:312px;background:#fff;border:1px solid #e6e9ee;border-radius:14px;box-shadow:0 26px 60px -28px rgba(20,30,50,.55);overflow:hidden;animation:ppup .16s ease;">
+        <div style="padding:11px 14px;border-bottom:1px solid #f3f5f8;"><div style="font-size:12px;font-weight:800;">Past analyses</div><div style="font-size:10px;color:#9aa3b1;margin-top:1px;">the most recent always shows on the map</div></div>
+        <div class="pp-scroll" style="max-height:248px;overflow-y:auto;padding:6px;">
+          <sc-for list="{{ runsList }}" as="r" hint-placeholder-count="2">
+            <button onClick="{{ r.open }}" style="{{ r.rowStyle }}">
+              <span style="width:8px;height:8px;border-radius:50%;background:{{ r.color }};flex:none;"></span>
+              <span style="flex:1;min-width:0;text-align:left;"><span style="display:block;font-size:12px;font-weight:600;letter-spacing:-.1px;">{{ r.title }}</span><span style="display:block;font-size:10px;color:#9aa3b1;font-family:'IBM Plex Mono',monospace;">{{ r.sub }}</span></span>
+              <span style="{{ r.statusStyle }}">{{ r.statusLabel }}</span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ SELECTED OBSERVATION CARD ============ -->
+  <sc-if value="{{ hasSelected }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;left:18px;bottom:18px;z-index:530;width:300px;background:#fff;border:1px solid #e6e9ee;border-radius:14px;box-shadow:0 24px 60px -30px rgba(20,30,50,.5);overflow:hidden;">
+      <div style="height:5px;background:{{ sel.color }};"></div>
+      <div style="padding:13px 14px 14px;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
+          <div style="min-width:0;">
+            <div style="display:flex;align-items:center;gap:7px;"><span style="font-size:14px;font-weight:700;letter-spacing:-.2px;">{{ sel.label }}</span><span style="{{ sel.statePill }}">{{ sel.stateLabel }}</span></div>
+            <div style="font-size:10.5px;color:#9aa3b1;font-family:'IBM Plex Mono',monospace;margin-top:2px;">{{ sel.id }} · {{ sel.coords }}</div>
+          </div>
+          <button onClick="{{ clearSelected }}" style="border:none;background:#f1f4f8;width:25px;height:25px;border-radius:7px;cursor:pointer;color:#5b6675;font-size:14px;line-height:1;flex:none;">×</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px;">
+          <div style="flex:1;background:#f7f9fc;border-radius:9px;padding:8px 10px;"><div style="font-size:9.5px;color:#9aa3b1;font-weight:600;text-transform:uppercase;letter-spacing:.4px;">Priority</div><div style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;font-weight:600;color:{{ sel.color }};margin-top:3px;">{{ sel.priorityLabel }}</div></div>
+          <div style="flex:1;background:#f7f9fc;border-radius:9px;padding:8px 10px;"><div style="font-size:9.5px;color:#9aa3b1;font-weight:600;text-transform:uppercase;letter-spacing:.4px;">Fact</div><div style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;font-weight:600;margin-top:3px;">{{ sel.fact }}</div></div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:11px;">
+          <div style="width:74px;height:55px;border-radius:9px;flex:none;overflow:hidden;background:repeating-linear-gradient(45deg,#eef1f5,#eef1f5 6px,#e7ebf1 6px,#e7ebf1 12px);border:1px solid #e6e9ee;position:relative;">
+            <div style="{{ sel.bboxStyle }}"></div>
+            <div style="position:absolute;bottom:0;left:0;right:0;font-family:'IBM Plex Mono',monospace;font-size:7px;color:#8a94a3;text-align:center;padding:1px 0;background:rgba(255,255,255,.7);">frame</div>
+          </div>
+          <div style="flex:1;min-width:0;font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#7a8493;line-height:1.55;">
+            <div>rec {{ sel.recordingId }}</div><div>{{ sel.frameRef }}</div><div style="color:#aab2bd;">{{ sel.detector }}</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:10px;">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#41506a;background:#eef1f5;border-radius:5px;padding:3px 7px;">conf ×{{ sel.confirmations }}</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#41506a;background:#eef1f5;border-radius:5px;padding:3px 7px;">miss {{ sel.misses }}</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#41506a;background:#eef1f5;border-radius:5px;padding:3px 7px;">{{ sel.observedAt }}</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#41506a;background:#eef1f5;border-radius:5px;padding:3px 7px;">{{ sel.confPct }}% conf.</span>
+        </div>
+        <div style="margin-top:9px;border-top:1px solid #f3f5f8;padding-top:8px;display:flex;align-items:center;gap:6px;font-size:11px;color:#5b6675;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex:none;"><path d="M12 21s-7-5.4-7-11a7 7 0 1114 0c0 5.6-7 11-7 11z" stroke="#9aa3b1" stroke-width="1.8"/><circle cx="12" cy="10" r="2.4" stroke="#9aa3b1" stroke-width="1.8"/></svg>
+          {{ sel.district }} · {{ sel.zone }}
+        </div>
+        <button onClick="{{ sel.previewSweep }}" style="margin-top:11px;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:#1b2430;color:#fff;border:none;border-radius:10px;height:38px;font-family:'Public Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M8 5l11 7-11 7V5z" fill="#fff"/></svg>Preview sweep {{ sel.sweep }}</button>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;},&quot;basemap&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;voyager&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;options&quot;:[&quot;#2f64e6&quot;,&quot;#0f766e&quot;,&quot;#7c3aed&quot;],&quot;default&quot;:&quot;#2f64e6&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  constructor(props){
+    super(props);
+    this._seq=1;
+    this.state = {
+      showPins:true, showHeat:true,
+      activeTypes:{pothole:true,open_drain:true,broken_light:true,missing_signage:true,damaged_sidewalk:true},
+      costs:{pothole:1800,open_drain:6300,broken_light:24000,missing_signage:12000,damaged_sidewalk:2400},
+      feed:[{id:0,role:'agent',type:'text',text:"I'm your priority-map agent. Tell me what to plan \u2014 e.g. \u201cbest pothole route under $3M\u201d \u2014 and I'll run it and show the result on the map. You can also start one any time with New analysis, or ask me to scan for likely unreported issues."}],
+      runs:[], activeId:null,
+      drawerOpen:false, drawerMin:false, costOpen:false, histOpen:false,
+      selected:null, command:'',
+      sweepPreview:null, sweepFocus:null, sweepT:0, sweepPlaying:false
+    };
+    this.TYPES=[
+      {slug:'pothole',label:'Pothole',es:'Bache',unit:'m\u00b2',step:100,latent:false,color:'#e5484d'},
+      {slug:'open_drain',label:'Open drain',es:'Alcantarilla',unit:'lin\u00b7m',step:200,latent:false,color:'#2f64e6'},
+      {slug:'broken_light',label:'Broken light',es:'Luminaria',unit:'item',step:1000,latent:false,color:'#f5a623'},
+      {slug:'missing_signage',label:'Missing signage',es:'Se\u00f1al ausente',unit:'item',step:1000,latent:true,color:'#7c3aed'},
+      {slug:'damaged_sidewalk',label:'Damaged sidewalk',es:'Banqueta',unit:'m\u00b2',step:100,latent:false,color:'#0f9b8e'}
+    ];
+    this.DISTRICTS=[
+      {cve:'015',name:'Cuauht\u00e9moc',lat:19.432,lng:-99.145},
+      {cve:'007',name:'Iztapalapa',lat:19.357,lng:-99.07},
+      {cve:'003',name:'Coyoac\u00e1n',lat:19.345,lng:-99.162},
+      {cve:'005',name:'Gustavo A. Madero',lat:19.487,lng:-99.118},
+      {cve:'010',name:'\u00c1lvaro Obreg\u00f3n',lat:19.36,lng:-99.20},
+      {cve:'011',name:'Tl\u00e1huac',lat:19.287,lng:-99.005}
+    ];
+    this.HOT=[
+      {name:'Centro',lat:19.4326,lng:-99.1332,issue:1.0,risk:0.85,d:'015'},
+      {name:'Iztapalapa',lat:19.357,lng:-99.07,issue:1.2,risk:1.0,d:'007'},
+      {name:'Coyoac\u00e1n',lat:19.345,lng:-99.162,issue:0.8,risk:0.4,d:'003'},
+      {name:'Gustavo A. Madero',lat:19.487,lng:-99.118,issue:0.95,risk:0.7,d:'005'},
+      {name:'\u00c1lvaro Obreg\u00f3n',lat:19.36,lng:-99.20,issue:0.7,risk:0.5,d:'010'},
+      {name:'Roma\u2013Norte',lat:19.414,lng:-99.16,issue:1.0,risk:0.6,d:'015'},
+      {name:'Tl\u00e1huac',lat:19.287,lng:-99.005,issue:0.12,risk:1.0,d:'011'}
+    ];
+    this.BBOX={s:19.255,n:19.56,w:-99.30,e:-98.99};
+    this.GRID={cols:18,rows:14};
+    this.BOUNDARY=[[19.592,-99.18],[19.57,-99.06],[19.50,-99.01],[19.43,-98.985],[19.34,-99.00],[19.26,-98.99],[19.17,-99.05],[19.155,-99.14],[19.19,-99.22],[19.26,-99.29],[19.35,-99.305],[19.44,-99.285],[19.52,-99.245]];
+    this.SWEEPS=[
+      {id:'SWP-3318',minsAgo:14,distanceKm:4.8,operator:'Unit 12 · J. Morales',vehicle:'Pickup · forward dashcam'},
+      {id:'SWP-3317',minsAgo:96,distanceKm:6.1,operator:'Unit 07 · A. Reyes',vehicle:'Pickup · forward dashcam'},
+      {id:'SWP-3309',minsAgo:430,distanceKm:5.2,operator:'Unit 03 · L. Castro',vehicle:'Motorcycle · helmet cam'},
+      {id:'SWP-3301',minsAgo:1510,distanceKm:7.4,operator:'Unit 19 · M. Soto',vehicle:'Pickup · forward dashcam'}
+    ];
+    this.fmt=new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',maximumFractionDigits:0});
+    this.buildData();
+  }
+  nextId(){return this._seq++;}
+  $(v){return this.fmt.format(v).replace('MX$','$');}
+
+  rng(seed){let a=seed>>>0;return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+  gauss(r){return (r()+r()+r()-1.5)/1.5;}
+  buildData(){
+    const r=this.rng(73);const issues=[];let id=1;
+    const totalW=this.HOT.reduce((a,h)=>a+h.issue,0);
+    for(let i=0;i<165;i++){
+      let x=r()*totalW,h=this.HOT[0];for(const hh of this.HOT){x-=hh.issue;if(x<=0){h=hh;break;}}
+      const lat=h.lat+this.gauss(r)*0.022,lng=h.lng+this.gauss(r)*0.026;
+      if(lat<this.BBOX.s||lat>this.BBOX.n||lng<this.BBOX.w||lng>this.BBOX.e){i--;continue;}
+      const t=this.TYPES[Math.floor(r()*this.TYPES.length)];
+      let weight=Math.min(99,Math.round((r()*0.55+h.risk*0.55+0.05)*100));
+      const pending=r()<0.15;
+      let qty=1;if(t.unit==='m\u00b2')qty=Math.round((4+r()*26)*10)/10;else if(t.unit==='lin\u00b7m')qty=Math.round((3+r()*17)*10)/10;
+      const dist=this.DISTRICTS.find(a=>a.cve===h.d)||this.DISTRICTS[0];
+      const sw=this.SWEEPS[Math.floor(r()*this.SWEEPS.length)];
+      issues.push({id:'OBS-'+String(id++).padStart(4,'0'),type:t.slug,lat,lng,
+        weight:pending?null:weight,state:pending?'pending':'scored',qty,
+        zone:h.name,districtCve:h.d,districtName:dist.name,
+        confirmations:1+Math.floor(r()*4),misses:Math.floor(r()*3),conf:0.7+r()*0.29,
+        observedMins:sw.minsAgo+Math.floor(r()*40),sweep:sw.id,
+        recordingId:'rec_'+(1000+Math.floor(r()*8999)),frameRef:'t+'+(10+Math.floor(r()*180))+'.'+Math.floor(r()*9)+'s',
+        bbox:{x:0.15+r()*0.4,y:0.18+r()*0.35,w:0.18+r()*0.22,h:0.16+r()*0.2}});
+    }
+    this.issues=issues;this.buildCells();
+  }
+  buildCells(){
+    const {s,n,w,e}=this.BBOX,{cols,rows}=this.GRID;const dLat=(n-s)/rows,dLng=(e-w)/cols;const cells=[];
+    for(let rI=0;rI<rows;rI++)for(let cI=0;cI<cols;cI++){
+      const latS=s+rI*dLat,latN=latS+dLat,lngW=w+cI*dLng,lngE=lngW+dLng,latC=(latS+latN)/2,lngC=(lngW+lngE)/2;
+      let risk=0;for(const h of this.HOT){const d=Math.hypot((latC-h.lat)/0.03,(lngC-h.lng)/0.035);risk+=h.risk*Math.exp(-d*d*0.6);}
+      cells.push({rI,cI,latS,latN,lngW,lngE,latC,lngC,risk,issueCount:0,weightSum:0});
+    }
+    this.cells=cells;this.dLat=dLat;this.dLng=dLng;this.maxRisk=Math.max(...cells.map(c=>c.risk));
+  }
+  binCells(active){
+    const {s,w}=this.BBOX;for(const c of this.cells){c.issueCount=0;c.weightSum=0;}
+    for(const it of this.issues){
+      if(active&&!active[it.type])continue;
+      const cI=Math.min(this.GRID.cols-1,Math.floor((it.lng-w)/this.dLng)),rI=Math.min(this.GRID.rows-1,Math.floor((it.lat-s)/this.dLat));
+      const cell=this.cells[rI*this.GRID.cols+cI];if(cell){cell.issueCount++;if(it.state==='scored')cell.weightSum+=it.weight;}
+    }
+    this.maxWeight=Math.max(1,...this.cells.map(c=>c.weightSum));
+  }
+
+  componentDidMount(){this.waitL(0);}
+  waitL(t){if(window.L){this.initMap();return;}if(t>120)return;setTimeout(()=>this.waitL(t+1),60);}
+  basemapUrl(){const b=this.props.basemap||'light';if(b==='voyager')return 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';if(b==='dark')return 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';return 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';}
+  initMap(){
+    if(!this.mapEl||this._map)return;const L=window.L;
+    if(L.Bounds&&!L.Bounds.prototype.__guardv2){const BI=L.Bounds.prototype.intersects;L.Bounds.prototype.intersects=function(b){if(!this||!this.min||!this.max||!b||!b.min||!b.max)return true;return BI.call(this,b);};L.Bounds.prototype.__guardv2=true;}
+    const gw=(proto,fn)=>{if(proto&&proto[fn]&&!proto['__g_'+fn]){const o=proto[fn];proto[fn]=function(){try{return o.apply(this,arguments);}catch(e){return;}};proto['__g_'+fn]=true;}};
+    if(L.Canvas){gw(L.Canvas.prototype,'_update');gw(L.Canvas.prototype,'_updatePaths');gw(L.Canvas.prototype,'_draw');gw(L.Canvas.prototype,'_onMouseMove');gw(L.Canvas.prototype,'_onClick');}
+    if(L.Renderer)gw(L.Renderer.prototype,'_update');
+    const map=L.map(this.mapEl,{zoomControl:false,attributionControl:true}).setView([19.40,-99.13],11);
+    this._rnd=L.canvas({padding:1});this._rnd.addTo(map);
+    L.control.zoom({position:'bottomright'}).addTo(map);
+    L.tileLayer(this.basemapUrl(),{subdomains:'abcd',maxZoom:19,attribution:'\u00a9 OpenStreetMap \u00a9 CARTO'}).addTo(map);
+    this._map=map;
+    this.boundaryG=L.layerGroup().addTo(map);
+    this.gridG=L.layerGroup().addTo(map);this.pinG=L.layerGroup().addTo(map);this.anaG=L.layerGroup().addTo(map);this.latentG=L.layerGroup().addTo(map);this.sweepG=L.layerGroup().addTo(map);
+    const redraw=()=>{map.invalidateSize(false);this.refresh();};
+    redraw();
+    if(!this.ready()){let n=0;const iv=setInterval(()=>{if(this.ready()||n++>30){clearInterval(iv);redraw();}},80);}
+    map.on('resize',redraw);
+  }
+  acc(){return this.props.accent||'#2f64e6';}
+  ready(){return this._map&&this._map.getSize&&this._map.getSize().x>0&&this._map._loaded;}
+  patchL(){const L=window.L;if(L&&L.Bounds&&!L.Bounds.prototype.__gp){const BI=L.Bounds.prototype.intersects;L.Bounds.prototype.intersects=function(b){try{if(!this||!this.min||!this.max||!b||!b.min||!b.max)return true;return BI.call(this,b);}catch(e){return true;}};L.Bounds.prototype.__gp=true;}}
+  prepR(){this.patchL();const r=this._rnd;if(r&&r._map&&r._update&&!this._map._animatingZoom){try{r._update();}catch(e){}}}
+  weightColor(w){return w==null?'#9aa3b1':w>=70?'#e5484d':w>=40?'#f5a623':'#30a46c';}
+  heat(t){const stops=[[48,164,108],[245,166,35],[229,72,77],[155,28,42]];const x=Math.min(0.999,Math.max(0,t))*(stops.length-1);const i=Math.floor(x),f=x-i,a=stops[i],b=stops[i+1]||a;return 'rgb('+Math.round(a[0]+(b[0]-a[0])*f)+','+Math.round(a[1]+(b[1]-a[1])*f)+','+Math.round(a[2]+(b[2]-a[2])*f)+')';}
+
+  refresh(){if(!this.ready())return;this.drawBoundary();this.drawGrid();this.drawPins();this.drawResult();this.drawSweep();}
+  drawBoundary(){if(!this.boundaryG)return;const L=window.L;this.prepR();this.boundaryG.clearLayers();L.polygon(this.BOUNDARY,{renderer:this._rnd,color:'#aab2bd',weight:1.2,opacity:0.75,dashArray:'2 5',fill:true,fillColor:'#9aa3b1',fillOpacity:0.015,interactive:false}).addTo(this.boundaryG);}
+  drawGrid(){if(!this.gridG||!this.ready())return;const L=window.L;this.prepR();this.gridG.clearLayers();if(!this.state.showHeat)return;this.binCells(this.state.activeTypes);for(const c of this.cells){if(c.weightSum<=0)continue;const t=c.weightSum/this.maxWeight;L.rectangle([[c.latS,c.lngW],[c.latN,c.lngE]],{renderer:this._rnd,stroke:false,fillColor:this.heat(t),fillOpacity:0.1+t*0.42,interactive:false}).addTo(this.gridG);}}
+  drawPins(){if(!this.pinG||!this.ready())return;const L=window.L;this.prepR();this.pinG.clearLayers();if(!this.state.showPins)return;const at=this.state.activeTypes;
+    for(const it of this.issues){if(!at[it.type])continue;
+      if(it.state==='pending'){L.circleMarker([it.lat,it.lng],{renderer:this._rnd,radius:4.5,color:'#9aa3b1',weight:1.3,opacity:0.85,fillColor:'#fff',fillOpacity:0.85,dashArray:'2 2'}).on('click',()=>this.selectIssue(it)).addTo(this.pinG);continue;}
+      L.circleMarker([it.lat,it.lng],{renderer:this._rnd,radius:5,color:'#fff',weight:1.3,opacity:0.95,fillColor:this.weightColor(it.weight),fillOpacity:0.92}).on('click',()=>this.selectIssue(it)).addTo(this.pinG);}}
+  fitTo(ll){if(!ll.length||!this._map)return;const L=window.L;const s=this.state;const dShow=s.drawerOpen&&s.activeId!=null;const exp=dShow&&!s.drawerMin;const padBottom=exp?332:(dShow?96:60);try{this._map.fitBounds(L.latLngBounds(ll).pad(0.3),{maxZoom:14,animate:false,paddingTopLeft:[60,60],paddingBottomRight:[400,padBottom]});}catch(e){}}
+  activeRun(){return this.state.runs.find(r=>r.id===this.state.activeId)||null;}
+  currentViz(){const s=this.state;const a=s.runs.find(r=>r.id===s.activeId);if(a&&a.result)return a;for(let i=s.runs.length-1;i>=0;i--){if(s.runs[i].result)return s.runs[i];}return null;}
+  drawResult(){if(!this.anaG||!this.ready())return;const L=window.L;this.anaG.clearLayers();this.latentG.clearLayers();const acc=this.acc();this.prepR();const m=this.currentViz();if(!m)return;
+    if(m.type==='analysis'){const a=m.result,pts=a.items;
+      if(a.kind==='route'&&pts.length>1)L.polyline(pts.map(p=>[p.lat,p.lng]),{renderer:this._rnd,color:acc,weight:3.5,opacity:0.85,dashArray:'1 8',lineCap:'round'}).addTo(this.anaG);
+      pts.forEach((p,i)=>{
+        L.circleMarker([p.lat,p.lng],{renderer:this._rnd,radius:11,color:'#fff',weight:2,fillColor:acc,fillOpacity:1}).on('click',()=>{const full=this.issues.find(x=>x.id===p.id);if(full)this.selectIssue(full);}).addTo(this.anaG);
+        L.marker([p.lat,p.lng],{interactive:false,icon:L.divIcon({className:'',html:'<div style="color:#fff;font:700 10px IBM Plex Mono,monospace;transform:translate(-50%,-50%);">'+(i+1)+'</div>',iconSize:[0,0]})}).addTo(this.anaG);
+      });
+    } else {
+      for(const c of m.result.rois){L.rectangle([[c.latS,c.lngW],[c.latN,c.lngE]],{renderer:this._rnd,color:'#7c3aed',weight:2,dashArray:'5 4',fill:true,fillColor:'#7c3aed',fillOpacity:0.1}).addTo(this.latentG);L.marker([c.latC,c.lngC],{interactive:false,icon:L.divIcon({className:'',html:'<div style="background:#7c3aed;color:#fff;font:600 10px IBM Plex Mono,monospace;padding:3px 7px;border-radius:7px;white-space:nowrap;box-shadow:0 3px 10px -2px rgba(124,58,237,.6);transform:translate(-50%,-50%);">Area '+c.idx+' \u00b7 '+c.riskPct+'% likely</div>',iconSize:[0,0]})}).addTo(this.latentG);}
+    }
+  }
+  haversine(la1,lo1,la2,lo2){const R=6371000,dLa=(la2-la1)*Math.PI/180,dLo=(lo2-lo1)*Math.PI/180;const a=Math.sin(dLa/2)**2+Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(dLo/2)**2;return 2*R*Math.asin(Math.sqrt(a));}
+  selectIssue(it){this.setState({selected:it});if(this._map)this._map.panTo([it.lat,it.lng],{animate:true});}
+
+  // ---------- sweep preview ----------
+  sweepRoute(id){
+    if(!this._sweepCache)this._sweepCache={};
+    if(this._sweepCache[id])return this._sweepCache[id];
+    let pts=this.issues.filter(o=>o.sweep===id);
+    if(!pts.length){return (this._sweepCache[id]={dets:[],dur:60});}
+    const seed=pts.reduce((a,b)=>((b.lat+b.lng)<(a.lat+a.lng)?b:a),pts[0]);
+    const rem=pts.filter(d=>d!==seed),path=[seed];
+    while(rem.length){const last=path[path.length-1];let bi=0,bd=Infinity;rem.forEach((p,i)=>{const d=this.haversine(last.lat,last.lng,p.lat,p.lng);if(d<bd){bd=d;bi=i;}});path.push(rem.splice(bi,1)[0]);}
+    const cum=[0];for(let i=1;i<path.length;i++)cum.push(cum[i-1]+this.haversine(path[i-1].lat,path[i-1].lng,path[i].lat,path[i].lng));
+    const total=cum[cum.length-1]||1;const dur=Math.round(70+path.length*5);
+    const dets=path.map((p,i)=>({...p,tSec:+(6+(cum[i]/total)*(dur-12)).toFixed(1)}));
+    return (this._sweepCache[id]={dets,dur,total});
+  }
+  sweepDets(id){return this.sweepRoute(id).dets;}
+  sweepDuration(id){return this.sweepRoute(id).dur;}
+  posAt(dets,t){if(!dets.length)return null;if(t<=dets[0].tSec)return [dets[0].lat,dets[0].lng];for(let i=1;i<dets.length;i++){if(t<=dets[i].tSec){const a=dets[i-1],b=dets[i],f=(t-a.tSec)/((b.tSec-a.tSec)||1);return [a.lat+(b.lat-a.lat)*f,a.lng+(b.lng-a.lng)*f];}}const e=dets[dets.length-1];return [e.lat,e.lng];}
+  stopSweepTimer(){if(this._swTimer){clearInterval(this._swTimer);this._swTimer=null;}}
+  persistSweep(){const s=this.state;if(s.sweepPreview!=null){try{localStorage.setItem('vialia_sweep_'+s.sweepPreview,String(s.sweepT||0));}catch(e){}}}
+  openSweep=(sweepId,focusId)=>{const dets=this.sweepDets(sweepId);let t=0;const f=focusId?dets.find(d=>d.id===focusId):null;if(f){t=Math.max(0,f.tSec-1);}else{try{const v=localStorage.getItem('vialia_sweep_'+sweepId);if(v!=null)t=parseFloat(v)||0;}catch(e){}}this.stopSweepTimer();this.setState({sweepPreview:sweepId,sweepFocus:focusId||null,sweepT:t,sweepPlaying:false});};
+  closeSweep=()=>{this.stopSweepTimer();this.persistSweep();this.setState({sweepPreview:null,sweepPlaying:false});};
+  toggleSweepPlay=()=>{if(this.state.sweepPlaying){this.stopSweepTimer();this.persistSweep();this.setState({sweepPlaying:false});return;}const dur=this.sweepDuration(this.state.sweepPreview);this.stopSweepTimer();this._swTimer=setInterval(()=>{this.setState(st=>{let t=(st.sweepT||0)+0.1;if(t>=dur)t=0;return {sweepT:t};});},100);this.setState({sweepPlaying:true});};
+  seekSweep=(t)=>{this.setState({sweepT:t},()=>this.persistSweep());};
+  drawSweep(){if(!this.sweepG||!this.ready())return;const L=window.L;this.prepR();this.sweepG.clearLayers();const id=this.state.sweepPreview;if(id==null)return;const route=this.sweepDets(id);if(!route.length)return;const acc=this.acc();const t=this.state.sweepT||0;const pos=this.posAt(route,t);
+    L.polyline(route.map(d=>[d.lat,d.lng]),{renderer:this._rnd,color:acc,weight:3,opacity:0.4,dashArray:'1 7',lineCap:'round',lineJoin:'round'}).addTo(this.sweepG);
+    const trav=route.filter(d=>d.tSec<=t).map(d=>[d.lat,d.lng]);if(pos){if(!trav.length)trav.push([route[0].lat,route[0].lng]);trav.push(pos);}
+    if(trav.length>1)L.polyline(trav,{renderer:this._rnd,color:acc,weight:4,opacity:0.95,lineCap:'round',lineJoin:'round'}).addTo(this.sweepG);
+    route.forEach(d=>{const ty=this.TYPES.find(x=>x.slug===d.type)||{};const isNow=Math.abs(d.tSec-t)<=2.2;const passed=d.tSec<=t;L.circleMarker([d.lat,d.lng],{renderer:this._rnd,radius:isNow?9:6,color:'#fff',weight:1.5,opacity:1,fillColor:ty.color||acc,fillOpacity:isNow?1:(passed?0.92:0.45)}).on('click',()=>this.openSweep(id,d.id)).addTo(this.sweepG);});
+    if(pos){L.circleMarker(pos,{renderer:this._rnd,radius:14,color:acc,weight:1.5,opacity:0.35,fill:false}).addTo(this.sweepG);L.circleMarker(pos,{renderer:this._rnd,radius:7,color:acc,weight:3,fillColor:'#fff',fillOpacity:1}).addTo(this.sweepG);}}
+  componentWillUnmount(){this.stopSweepTimer();this.persistSweep();}
+
+  componentDidUpdate(){if(!this._map)return;this.refresh();
+    if(this._prevSweep!==this.state.sweepPreview){this._prevSweep=this.state.sweepPreview;if(this.state.sweepPreview!=null){const ds=this.sweepDets(this.state.sweepPreview);if(ds.length)this.fitTo(ds.map(d=>[d.lat,d.lng]));}}
+    const m=this.currentViz();
+    if(m&&m.result){const key=m.id+'_'+(m.result.items?m.result.items.length:m.result.rois.length)+'_'+(m.budget||0)+'_'+(m.kind||'');if(key!==this._fitKey){this._fitKey=key;const ll=m.type==='analysis'?m.result.items.map(p=>[p.lat,p.lng]):m.result.rois.map(c=>[c.latC,c.lngC]);if(ll.length)this.fitTo(ll);}}
+    if(this._prevBasemap!==this.props.basemap){this._prevBasemap=this.props.basemap;this._map.eachLayer(l=>{if(l.getTileSize)this._map.removeLayer(l);});window.L.tileLayer(this.basemapUrl(),{subdomains:'abcd',maxZoom:19,attribution:'\u00a9 OpenStreetMap \u00a9 CARTO'}).addTo(this._map);}
+    const fl=this.state.feed.length;if(this.feedEl&&fl!==this._lastFeedLen){this._lastFeedLen=fl;const last=this.feedEl.lastElementChild;this.feedEl.scrollTop=last?Math.max(0,last.offsetTop-10):this.feedEl.scrollHeight;}}
+
+  // ---------- compute ----------
+  liveEligible(at){at=at||this.state.activeTypes;return this.issues.filter(o=>at[o.type]&&o.state==='scored');}
+  computeAnalysis(kind,budget,costs,at){costs=costs||this.state.costs;const elig=this.liveEligible(at);const costOf=o=>costs[o.type]*o.qty;
+    let scored=elig.map(o=>({o,score:o.weight+(o.weight/(costOf(o)||1))*8000})).sort((a,b)=>b.score-a.score);
+    const cap=40,picked=[];let spent=0;for(const {o} of scored){if(picked.length>=cap)break;const c=costOf(o);if(spent+c<=budget){picked.push(o);spent+=c;}}
+    let ordered=picked;
+    if(kind==='route'&&picked.length>1){const seed=picked.reduce((a,b)=>(b.lat+(-b.lng))>(a.lat+(-a.lng))?b:a,picked[0]);const rem=picked.filter(p=>p!==seed),path=[seed];while(rem.length){const last=path[path.length-1];let bi=0,bd=Infinity;rem.forEach((p,i)=>{const d=this.haversine(last.lat,last.lng,p.lat,p.lng);if(d<bd){bd=d;bi=i;}});path.push(rem.splice(bi,1)[0]);}ordered=path;}
+    const prioPts=picked.reduce((a,b)=>a+b.weight,0);const totalHigh=elig.filter(o=>o.weight>=70).length,highHit=picked.filter(o=>o.weight>=70).length;
+    let dist=0;for(let i=1;i<ordered.length;i++)dist+=this.haversine(ordered[i-1].lat,ordered[i-1].lng,ordered[i].lat,ordered[i].lng);
+    const zones=[...new Set(picked.map(o=>o.zone))].length;
+    return {kind,items:ordered.map(o=>({id:o.id,type:o.type,lat:o.lat,lng:o.lng,weight:o.weight,zone:o.zone,cost:costOf(o)})),spent,count:picked.length,prioPts,zones,riskRed:totalHigh?Math.round(highHit/totalHigh*100):0,distKm:(dist/1000).toFixed(1),eligCount:elig.length};
+  }
+  computeLatent(){
+    this.binCells(null);
+    const rois=this.cells.map(c=>({...c,riskN:c.risk/this.maxRisk})).filter(c=>c.riskN>0.5&&c.issueCount<=1).sort((a,b)=>b.riskN-a.riskN).slice(0,6).map((c,i)=>({...c,idx:i+1,riskPct:Math.round(c.riskN*100)}));
+    const HYP=['Missing street lighting','Missing transit signal','Missing signage','Unmarked pedestrian crossing'];const hypos=[];
+    rois.forEach((c,i)=>{const n=1+(Math.round(c.riskN*10)%2);for(let k=0;k<=n;k++)hypos.push({roi:c.idx,type:HYP[(i+k)%HYP.length],riskPct:c.riskPct,lat:c.latC,lng:c.lngC});});
+    return {rois,hypos};
+  }
+
+  // ---------- run lifecycle ----------
+  lastAnalysis(){for(let i=this.state.runs.length-1;i>=0;i--){if(this.state.runs[i].type==='analysis')return this.state.runs[i];}return null;}
+  lastKind(){const a=this.lastAnalysis();return a?a.kind:'route';}
+  lastBudget(){const a=this.lastAnalysis();return a?a.budget:3000000;}
+  newAnalysis=()=>{const id=this.nextId();const kind=this.lastKind(),budget=this.lastBudget();
+    this.setState(s=>({runs:[...s.runs,{id,type:'analysis',kind,budget,status:'running',result:null}],activeId:id,drawerOpen:true,drawerMin:false,histOpen:false,costOpen:false}));
+    setTimeout(()=>this.setState(s=>({runs:s.runs.map(r=>r.id===id?{...r,status:'done',result:this.computeAnalysis(r.kind,r.budget,s.costs)}:r)})),650);};
+  openRun=(id)=>this.setState({activeId:id,drawerOpen:true,drawerMin:false,histOpen:false,costOpen:false});
+  closeDrawer=()=>this.setState({drawerOpen:false,histOpen:false,costOpen:false});
+  toggleMin=()=>this.setState(s=>({drawerMin:!s.drawerMin,costOpen:false}));
+  toggleCost=()=>this.setState(s=>({costOpen:!s.costOpen}));
+  toggleHist=()=>this.setState(s=>({histOpen:!s.histOpen}));
+  setKind=(k)=>this.setState(s=>({runs:s.runs.map(r=>r.id===s.activeId&&r.type==='analysis'?{...r,kind:k,status:'done',result:this.computeAnalysis(k,r.budget,s.costs)}:r)}));
+  onBudget=(ev)=>{const v=+ev.target.value;this.setState(s=>({runs:s.runs.map(r=>r.id===s.activeId&&r.type==='analysis'?{...r,budget:v,result:this.computeAnalysis(r.kind,v,s.costs)}:r)}));};
+  adjCost=(slug,delta,min)=>this.setState(s=>{const costs={...s.costs,[slug]:Math.max(min,s.costs[slug]+delta)};return {costs,runs:s.runs.map(r=>r.id===s.activeId&&r.type==='analysis'?{...r,result:this.computeAnalysis(r.kind,r.budget,costs)}:r)};});
+
+  parseCommand(text){
+    const t=text.toLowerCase();const out={};
+    const m=t.match(/\$?\s*([\d.]+)\s*(m|k|mill|millon)?/);
+    if(m){let v=parseFloat(m[1]);const u=m[2]||'';if(u.startsWith('m'))v*=1e6;else if(u==='k')v*=1e3;else if(v<100)v*=1e6;out.budget=Math.min(20e6,Math.max(5e5,Math.round(v)));}
+    if(/latent|gap|hueco|missing|absen|vlm|unreported/.test(t))out.latent=true;
+    else if(/cluster|zona|zone|densest|group/.test(t))out.kind='cluster';
+    else if(/route|ruta|path|recorrido/.test(t))out.kind='route';
+    const tm={pothole:'pothole',bache:'pothole',drain:'open_drain',sewer:'open_drain',alcantarill:'open_drain',light:'broken_light',lumin:'broken_light',sign:'missing_signage',se\u00f1al:'missing_signage',senal:'missing_signage',sidewalk:'damaged_sidewalk',banqueta:'damaged_sidewalk'};
+    let only=null;for(const k in tm){if(t.includes(k)){only=tm[k];break;}}
+    if(only&&/only|s\u00f3lo|solo|just/.test(t)){const at={};this.TYPES.forEach(x=>at[x.slug]=x.slug===only);out.activeTypes=at;}
+    return out;
+  }
+  runCommand=()=>{
+    const text=this.state.command.trim();if(!text)return;
+    const p=this.parseCommand(text);const id=this.nextId();const isL=!!p.latent;
+    const kind=p.kind||this.lastKind();const budget=p.budget||this.lastBudget();
+    const run=isL?{id,type:'latent',status:'running',result:null}:{id,type:'analysis',kind,budget,status:'running',result:null};
+    const reply=isL?'Scanning for likely unreported issues \u2014 results are on the map and below.':'Showing the '+(kind==='route'?'route plan':'priority group')+' below \u2014 tweak the budget or basis and it updates live.';
+    const patch={command:'',activeId:id,drawerOpen:true,drawerMin:false,histOpen:false,costOpen:false};if(p.activeTypes)patch.activeTypes=p.activeTypes;
+    this.setState(s=>({...patch,runs:[...s.runs,run],feed:[...s.feed,{id:this.nextId(),role:'user',type:'text',text},{id:this.nextId(),role:'agent',type:'text',text:reply},{id:this.nextId(),type:'card',runId:id}]}));
+    setTimeout(()=>this.setState(s=>({runs:s.runs.map(r=>r.id===id?{...r,status:'done',result:isL?this.computeLatent():this.computeAnalysis(r.kind,r.budget,s.costs)}:r)})),700);
+  };
+
+  // ---------- view helpers ----------
+  segStyle(a){return 'border:none;border-radius:7px;height:30px;padding:0 14px;font-family:Public Sans,sans-serif;font-size:12px;font-weight:600;cursor:pointer;'+(a?'background:#fff;color:#1b2430;box-shadow:0 1px 3px rgba(20,30,50,.12);':'background:none;color:#6b7686;');}
+  checkbox(on,color){return {box:'width:16px;height:16px;border-radius:5px;flex:none;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;border:1.5px solid '+(on?(color||this.acc()):'#cdd4de')+';background:'+(on?(color||this.acc()):'#fff')+';',check:on?'\u2713':''};}
+  rowBtn(){return 'display:flex;align-items:center;gap:9px;width:100%;border:none;background:none;cursor:pointer;padding:6px 2px;text-align:left;';}
+  statusPill(st){const map={running:['#2f64e6','#eaf0ff','#d9e4ff','Running'],done:['#1d7a4d','#e7f6ec','#cdecd8','Done']};const x=map[st]||map.running;return {style:'font-family:IBM Plex Mono,monospace;font-size:9px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:'+x[0]+';background:'+x[1]+';border:1px solid '+x[2]+';border-radius:5px;padding:2px 7px;flex:none;',label:x[3]};}
+
+  cardDisplay(run){const sp=this.statusPill(run.status);const acc=this.acc();const isL=run.type==='latent';const done=run.status==='done'&&run.result;
+    let badgeId,badgeColor,badgeBg,title,subline,summary=[];
+    if(isL){badgeId='Inspection scan';badgeColor='#7c3aed';badgeBg='#f4eeff';title='Suspected unreported issues';subline='Likely problems no one has reported yet';if(done)summary=[{v:run.result.rois.length,l:'areas to inspect'},{v:run.result.hypos.length,l:'suspected issues'}];}
+    else{badgeId=run.kind==='route'?'Route plan':'Priority group';badgeColor=acc;badgeBg='#eaf0ff';title=run.kind==='route'?'Optimal service route':'Highest-impact group';subline=this.$(run.budget)+' \u00b7 whole city';if(done)summary=[{v:run.result.count,l:'addressed'},{v:run.result.riskRed+'%',l:'high cleared'}];}
+    return {isCard:true,isUser:false,isText:false,badgeId,badgeColor,badgeBg,title,subline,statusLabel:sp.label,statusStyle:sp.style,hasResult:!!done,summary,pendingRun:!done,runningText:'Computing\u2026',openView:()=>this.openRun(run.id)};
+  }
+
+  renderVals(){
+    const s=this.state,acc=this.acc();document.documentElement.style.setProperty('--acc',acc);
+    const counts={};this.TYPES.forEach(t=>counts[t.slug]=0);this.issues.forEach(i=>counts[i.type]++);
+    const pinCb=this.checkbox(s.showPins),heatCb=this.checkbox(s.showHeat);
+
+    const typeList=this.TYPES.map(t=>{const on=s.activeTypes[t.slug];return {label:t.label,isLatent:t.latent,count:counts[t.slug],nameColor:on?'#1b2430':'#a9b1bd',rowStyle:this.rowBtn()+'opacity:'+(on?'1':'.55')+';',dotStyle:'width:11px;height:11px;border-radius:50%;flex:none;border:2px solid '+(on?t.color:'#cdd4de')+';background:'+(on?t.color:'#fff')+';',toggle:()=>this.setState(st=>{const activeTypes={...st.activeTypes,[t.slug]:!on};return {activeTypes,runs:st.runs.map(r=>r.id===st.activeId&&r.type==='analysis'?{...r,result:this.computeAnalysis(r.kind,r.budget,st.costs,activeTypes)}:r)};})};});
+
+    const costList=this.TYPES.filter(t=>s.activeTypes[t.slug]).map(t=>({label:t.label,unit:t.unit,color:t.color,costFmt:this.$(s.costs[t.slug]),inc:()=>this.adjCost(t.slug,t.step,t.step),dec:()=>this.adjCost(t.slug,-t.step,t.step)}));
+
+    const feed=s.feed.map(m=>{const def={isUser:false,isText:false,isCard:false,text:'',summary:[]};if(m.type==='text')return {...def,isUser:m.role==='user',isText:m.role==='agent',text:m.text};if(m.type==='card'){const run=s.runs.find(r=>r.id===m.runId);return run?{...def,...this.cardDisplay(run)}:def;}return def;});
+
+    const chips=[{label:'\u26a1 Pothole route $3M',cmd:'best pothole route under $3M'},{label:'\u25ce Group $5M',cmd:'highest impact group $5M'},{label:'\u26a0 Latent scan',cmd:'find likely unreported issues'}].map(c=>({label:c.label,run:()=>this.setState({command:c.cmd},()=>this.runCommand())}));
+
+    // dock view
+    const active=this.activeRun();
+    const drawerShow=s.drawerOpen&&!!active;
+    let dv={isLatent:false,title:'',sub:'',hdr:acc,statusLabel:'',statusStyle:'',running:false,runningText:'',showControls:false,kind:'route',budget:3000000,budgetFmt:this.$(3000000),hasResult:false,stats:[],listTitle:'',listNote:'',items:[]};
+    if(active){const sp=this.statusPill(active.status);const isL=active.type==='latent';const done=active.status==='done'&&active.result;
+      dv.isLatent=isL;dv.statusLabel=sp.label;dv.statusStyle=sp.style;dv.running=active.status==='running';dv.hasResult=!!done;dv.hdr=isL?'#7c3aed':acc;
+      if(isL){dv.title='Suspected unreported issues';dv.sub='Likely problems no one has reported yet \u2014 worth inspecting';dv.runningText='Finding areas to inspect\u2026';dv.listTitle='Suspected issues to confirm';dv.listNote='Each is dropped on the map as a pending item for an inspector to verify in person.';
+        if(done){const r=active.result;dv.stats=[{value:r.rois.length,label:'Areas worth inspecting',bg:'#f6f1ff',border:'#e7daff',color:'#7c3aed'},{value:r.hypos.length,label:'Suspected issues found',bg:'#f6f1ff',border:'#e7daff',color:'#7c3aed'}];
+          dv.items=r.hypos.map(h=>({badge:'A'+h.roi,badgeBg:'#f1eaff',badgeColor:'#7c3aed',label:h.type,meta:'Area '+h.roi+' \u00b7 '+h.riskPct+'% likely',dot:'#7c3aed',onClick:()=>{if(this._map)this._map.flyTo([h.lat,h.lng],14);}}));}
+      } else {dv.showControls=true;dv.kind=active.kind;dv.budget=active.budget;dv.budgetFmt=this.$(active.budget);
+        dv.title=active.kind==='route'?'Optimal service route':'Highest-impact group';dv.sub=this.$(active.budget)+' \u00b7 whole city';dv.runningText='Computing the plan\u2026';dv.listTitle=active.kind==='route'?'Ordered stops':'Group members';
+        if(done){const a=active.result;const usedPct=Math.round(a.spent/active.budget*100);
+          dv.stats=[{value:a.count,label:'Observations addressed',bg:'#eaf0ff',border:'#d9e4ff',color:acc},{value:this.$(a.spent),label:'Budget spent ('+Math.min(100,usedPct)+'%)',bg:'#f7f9fc',border:'#eef0f4',color:'#1b2430'},{value:a.riskRed+'%',label:'High-priority cleared',bg:'#fdeceb',border:'#f8d8d6',color:'#e5484d'},{value:a.kind==='route'?a.distKm+'km':a.zones,label:a.kind==='route'?'Crew travel distance':'Districts spanned',bg:'#f7f9fc',border:'#eef0f4',color:'#1b2430'}];
+          dv.items=a.items.map((ob,i)=>({badge:String(i+1),badgeBg:'#eef1f5',badgeColor:'#41506a',label:(this.TYPES.find(t=>t.slug===ob.type)||{}).label+' \u00b7 '+ob.zone,meta:ob.id+' \u00b7 w'+ob.weight+' \u00b7 '+this.$(ob.cost),dot:this.weightColor(ob.weight),onClick:()=>{const full=this.issues.find(x=>x.id===ob.id);if(full)this.selectIssue(full);}}));}
+      }
+    }
+
+    const runsList=s.runs.slice().reverse().map(r=>{const sp=this.statusPill(r.status);const isL=r.type==='latent';const isActive=r.id===s.activeId;return {title:isL?'Inspection scan':(r.kind==='route'?'Route plan':'Priority group'),sub:isL?'suspected issues':this.$(r.budget),color:isL?'#7c3aed':acc,statusLabel:sp.label,statusStyle:sp.style,open:()=>this.openRun(r.id),rowStyle:'width:100%;display:flex;align-items:center;gap:10px;padding:8px 9px;border:none;border-radius:9px;cursor:pointer;background:'+(isActive?'#f4f7ff':'none')+';'};});
+
+    const sel=s.selected;let selVals={};
+    if(sel){const t=this.TYPES.find(x=>x.slug===sel.type)||{};const pending=sel.state==='pending';const fact=t.unit==='item'?'1 item':(sel.qty+' '+t.unit);
+      selVals={label:t.label,id:sel.id,sweep:sel.sweep,previewSweep:()=>this.openSweep(sel.sweep,sel.id),coords:sel.lat.toFixed(4)+', '+sel.lng.toFixed(4),color:this.weightColor(sel.weight),stateLabel:pending?'pending':'scored',statePill:'font-family:IBM Plex Mono,monospace;font-size:8px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;border-radius:4px;padding:1px 5px;'+(pending?'color:#7a8493;background:#eef1f5;border:1px dashed #cdd4de;':'color:#1d7a4d;background:#e7f6ec;border:1px solid #cdecd8;'),priorityLabel:pending?'pending':'weight '+sel.weight,fact,recordingId:sel.recordingId,frameRef:'frame '+sel.frameRef,detector:'cdmx-vision v2.3.1',bboxStyle:'position:absolute;border:1.5px solid '+this.weightColor(sel.weight)+';border-radius:3px;box-shadow:0 0 0 9999px rgba(27,36,48,.08);left:'+(sel.bbox.x*100)+'%;top:'+(sel.bbox.y*100)+'%;width:'+(sel.bbox.w*100)+'%;height:'+(sel.bbox.h*100)+'%;',confirmations:sel.confirmations,misses:sel.misses,observedAt:sel.observedMins<60?sel.observedMins+'m ago':Math.round(sel.observedMins/60)+'h ago',confPct:Math.round(sel.conf*100),district:sel.districtName,zone:sel.zone};}
+
+    // sweep preview view
+    const sweepShow=s.sweepPreview!=null;
+    let sw={id:'',ago:'',detCount:0,distance:'',durFmt:'0:00',tFmt:'0:00',dur:60,t:0,operator:'',vehicle:'',frameNo:'',active:[],detList:[],ticks:[]};
+    if(sweepShow){
+      const meta=this.SWEEPS.find(x=>x.id===s.sweepPreview)||{};
+      const dets=this.sweepDets(s.sweepPreview);const dur=this.sweepDuration(s.sweepPreview);const t=Math.min(dur,s.sweepT||0);const win=2.2;
+      const fmtT=x=>{const mm=Math.floor(x/60),ss=Math.floor(x%60);return mm+':'+String(ss).padStart(2,'0');};
+      const ago=meta.minsAgo<60?meta.minsAgo+'m ago':Math.round(meta.minsAgo/60)+'h ago';
+      const active=dets.filter(d=>Math.abs(d.tSec-t)<=win).map(d=>{const ty=this.TYPES.find(x=>x.slug===d.type)||{};const fade=1-Math.min(1,Math.abs(d.tSec-t)/win);return {color:ty.color,label:ty.label,conf:Math.round(d.conf*100),boxStyle:'position:absolute;left:'+(d.bbox.x*100).toFixed(1)+'%;top:'+(d.bbox.y*100).toFixed(1)+'%;width:'+(d.bbox.w*100).toFixed(1)+'%;height:'+(d.bbox.h*100).toFixed(1)+'%;border:2px solid '+ty.color+';border-radius:4px;box-shadow:0 0 0 1px rgba(0,0,0,.3);opacity:'+(0.4+fade*0.6).toFixed(2)+';'};});
+      const detList=dets.map(d=>{const ty=this.TYPES.find(x=>x.slug===d.type)||{};const isNow=Math.abs(d.tSec-t)<=win;const isFocus=d.id===s.sweepFocus;return {color:ty.color,label:ty.label,id:d.id,timeFmt:fmtT(d.tSec),isNow,seek:()=>this.seekSweep(Math.max(0,d.tSec-0.6)),rowStyle:'width:100%;display:flex;align-items:center;gap:9px;padding:8px 10px;margin-bottom:6px;border:1px solid '+(isFocus?acc:(isNow?'#d9e4ff':'#eef0f4'))+';border-radius:10px;background:'+(isNow?'#f4f7ff':'#fbfcfe')+';cursor:pointer;'};});
+      const ticks=dets.map(d=>{const ty=this.TYPES.find(x=>x.slug===d.type)||{};return {left:(d.tSec/dur*100).toFixed(2)+'%',color:ty.color};});
+      sw={id:s.sweepPreview,ago,detCount:dets.length,distance:(meta.distanceKm||0)+' km',durFmt:fmtT(dur),tFmt:fmtT(t),dur,t,operator:meta.operator||'',vehicle:meta.vehicle||'',frameNo:'frame '+String(Math.round(t*24)).padStart(5,'0'),active,detList,ticks};
+    }
+
+    return {
+      mapRef:el=>{this.mapEl=el;},feedRef:el=>{this.feedEl=el;},
+      lastSweep:'sweep '+this.SWEEPS[0].minsAgo+'m ago',totalObs:this.issues.length,
+      togglePins:()=>this.setState({showPins:!s.showPins}),toggleHeat:()=>this.setState({showHeat:!s.showHeat}),
+      pinRowStyle:this.rowBtn(),heatRowStyle:this.rowBtn(),pinBoxStyle:pinCb.box,pinCheck:pinCb.check,heatBoxStyle:heatCb.box,heatCheck:heatCb.check,
+      typeList,
+      // chat
+      feed,chips,command:s.command,onCommandChange:ev=>this.setState({command:ev.target.value}),onCommandKey:ev=>{if(ev.key==='Enter')this.runCommand();},runCommand:this.runCommand,
+      // launcher / dock
+      launcherShow:!drawerShow,newAnalysis:this.newAnalysis,hasRuns:s.runs.length>0,toggleHist:this.toggleHist,
+      drawerShow,drawerExpanded:!s.drawerMin,drawerCollapsed:s.drawerMin,drawerHeadBorder:(!s.drawerMin?'border-bottom:1px solid #eef0f4;':''),
+      dv,closeDrawer:this.closeDrawer,toggleMin:this.toggleMin,
+      setKindRoute:()=>this.setKind('route'),setKindCluster:()=>this.setKind('cluster'),
+      kindRouteStyle:this.segStyle(dv.kind==='route'),kindClusterStyle:this.segStyle(dv.kind==='cluster'),
+      onBudget:this.onBudget,toggleCost:this.toggleCost,costOpen:s.costOpen,costList,
+      costBtnStyle:'flex:none;border:1px solid '+(s.costOpen?acc:'#e3e7ee')+';background:'+(s.costOpen?'#eef3ff':'#fff')+';color:'+(s.costOpen?acc:'#41506a')+';border-radius:9px;height:30px;padding:0 12px;font-family:Public Sans,sans-serif;font-size:11.5px;font-weight:600;cursor:pointer;',
+      // history
+      histOpen:s.histOpen,runsList,histBottom:drawerShow?'358px':'70px',
+      // selected
+      hasSelected:!!sel,sel:selVals,clearSelected:()=>this.setState({selected:null}),
+      sweepShow,agentShow:!sweepShow,sweepPlaying:s.sweepPlaying,sweepPaused:!s.sweepPlaying,sw,closeSweep:this.closeSweep,toggleSweepPlay:this.toggleSweepPlay,onSweepSeek:ev=>this.seekSweep(+ev.target.value)
+    };
+  }
+}
+</script>
+</body>
+</html>

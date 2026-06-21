@@ -1,5 +1,5 @@
 """The citizen route's confirmation gate. Stores are faked (no DB/R2) so we test only the
-branching: gate off → create; gate on + confirmed → create; gate on + unconfirmed/timeout → 422."""
+branching: confirmed → create; unconfirmed/timeout → 422. The gate is always on."""
 import uuid
 
 import pytest
@@ -76,24 +76,14 @@ def _post(raw_client):
     )
 
 
-def test_gate_off_creates_observation(raw_client, gate_env, patched_stores):
-    gate_env.setenv("INFERENCE_CONFIRMATION_ENABLED", "false")
+def test_confirmed_creates_observation(raw_client, gate_env, patched_stores):
     get_settings.cache_clear()
     r = _post(raw_client)
     assert r.status_code == 200
     assert r.json()["observationId"]
 
 
-def test_gate_on_confirmed_creates_observation(raw_client, gate_env, patched_stores):
-    gate_env.setenv("INFERENCE_CONFIRMATION_ENABLED", "true")
-    get_settings.cache_clear()
-    r = _post(raw_client)
-    assert r.status_code == 200
-    assert r.json()["observationId"]
-
-
-def test_gate_on_unconfirmed_returns_422(raw_client, gate_env, patched_stores):
-    gate_env.setenv("INFERENCE_CONFIRMATION_ENABLED", "true")
+def test_unconfirmed_returns_422(raw_client, gate_env, patched_stores):
     get_settings.cache_clear()
     _FakeJobStore.verdict = {"status": "done", "response": {"confirmed": False}, "error": None}
     r = _post(raw_client)
@@ -101,8 +91,7 @@ def test_gate_on_unconfirmed_returns_422(raw_client, gate_env, patched_stores):
     assert r.json()["error"]["code"] == "not_confirmed"
 
 
-def test_gate_on_timeout_returns_422(raw_client, gate_env, patched_stores):
-    gate_env.setenv("INFERENCE_CONFIRMATION_ENABLED", "true")
+def test_timeout_returns_422(raw_client, gate_env, patched_stores):
     get_settings.cache_clear()
     _FakeJobStore.verdict = {"status": "timeout", "response": None, "error": "inference timeout"}
     r = _post(raw_client)

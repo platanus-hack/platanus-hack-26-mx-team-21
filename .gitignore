@@ -227,5 +227,10 @@ __marimo__/
 .wrangler/
 .superpowers/
 
+# Claude Code local state & worktrees
+.claude/
+.claire/
+frontend/verify_tmp.cjs
+
 # local object-storage backend (services/api LOCAL_ROOT)
 .data/

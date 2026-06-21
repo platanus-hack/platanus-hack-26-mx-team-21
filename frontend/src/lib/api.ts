@@ -2,10 +2,12 @@
 // these; it has no direct access to the custom schemas.
 import { supabase } from "./supabase";
 import type {
+  DimensionCount,
   Observation,
   ObservationDetail,
   Roi,
   RunSummary,
+  SweepRoute,
   Tenant,
   TypeCount,
 } from "./types";
@@ -43,6 +45,9 @@ export async function getObservations(): Promise<Observation[]> {
     zone: r.zone,
     districtCve: r.district_cve,
     districtName: r.district_name,
+    source: r.source,
+    thumbPath: r.thumb_path,
+    sweep: r.sweep,
   }));
 }
 
@@ -75,8 +80,35 @@ export async function getObservationDetail(id: string): Promise<ObservationDetai
   };
 }
 
-export async function getRois(): Promise<Roi[]> {
-  const { data, error } = await supabase.rpc("app_current_rois");
+// Resolve the inspection sweep behind one observation: its coverage footprint
+// (GeoJSON), time window, observation count, and the originating point — for the
+// "Ver recorrido" overlay. Returns null if the observation isn't visible.
+export async function getSweepRoute(id: string): Promise<SweepRoute | null> {
+  const { data, error } = await supabase.rpc("app_sweep_route", { p_observation_id: id });
+  if (error) throw error;
+  const r = data?.[0];
+  if (!r) return null;
+  return {
+    sweep: r.sweep,
+    startedAt: r.started_at,
+    endedAt: r.ended_at,
+    obsCount: r.obs_count,
+    areaKm2: r.area_km2,
+    coverage: r.coverage_geojson,
+    originLat: r.origin_lat,
+    originLng: r.origin_lng,
+    videoBucket: r.video_bucket ?? null,
+    videoPath: r.video_path ?? null,
+    videoDurationMs: r.video_duration_ms ?? null,
+    videoFps: r.video_fps ?? null,
+  };
+}
+
+export async function getRois(dimensions?: string[], limit?: number): Promise<Roi[]> {
+  const { data, error } = await supabase.rpc("app_current_rois", {
+    p_dimensions: dimensions && dimensions.length ? dimensions : undefined,
+    p_limit: limit ?? undefined,
+  });
   if (error) throw error;
   return (data ?? []).map((r) => ({
     id: r.id,
@@ -86,7 +118,18 @@ export async function getRois(): Promise<Roi[]> {
     riskScore: r.risk_score,
     dominantType: r.dominant_type,
     description: r.description,
+    signalCount: r.signal_count,
     geojson: r.geom_geojson,
+  }));
+}
+
+export async function getRoiDimensionCounts(): Promise<DimensionCount[]> {
+  const { data, error } = await supabase.rpc("app_roi_dimension_counts");
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    dimension: r.risk_dimension,
+    count: r.roi_count,
+    maxRisk: r.max_risk,
   }));
 }
 

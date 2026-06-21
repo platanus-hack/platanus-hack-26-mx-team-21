@@ -18,7 +18,7 @@ await page.waitForSelector('input[type="password"]');
 await page.screenshot({ path: "/tmp/citycrawl-login.png" });
 console.log("login shot ok");
 
-await page.type('input[type="password"]', "vialia-dev-2026!");
+await page.type('input[type="password"]', "citycrawl-dev-2026!");
 await page.click('button[type="submit"]');
 await page.waitForFunction(() => /CAPAS/i.test(document.body.innerText), { timeout: 20000 });
 await wait(4500);

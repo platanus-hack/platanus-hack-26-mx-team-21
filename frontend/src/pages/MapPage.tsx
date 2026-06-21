@@ -5,11 +5,15 @@ import { AgentPanel } from "../components/AgentPanel";
 import { AnalysisDock } from "../components/AnalysisDock";
 import { HistoryPopover, type PlanHistoryItem } from "../components/HistoryPopover";
 import { ObservationCard } from "../components/ObservationCard";
+import { ToastStack } from "../components/ToastStack";
 import { Button } from "@/components/ui/button";
+import { Panel } from "@/components/ui/panel";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "../lib/auth";
 import * as api from "../lib/api";
-import { optimizePlan, parseDraft } from "../lib/citycrawlApi";
+import { useObservationStream, type Toast } from "../lib/observationStream";
+import { fetchObjectUrl, fetchBlobUrl, THUMBNAIL_BUCKET } from "../lib/objects";
+import { optimizePlan, chatDraft } from "../lib/citycrawlApi";
 import {
   ACTIVE_ISSUE_TYPES,
   DEFAULT_BUDGET,
@@ -20,6 +24,9 @@ import {
 import type {
   AnalysisPoint,
   AnalysisRequest,
+  ChatMessage,
+  DimensionCount,
+  DraftChatResponse,
   Observation,
   ObservationDetail,
   PlanDraft,
@@ -27,6 +34,7 @@ import type {
   RegionOption,
   Roi,
   RunSummary,
+  SweepRoute,
   TypeCount,
 } from "../lib/types";
 
@@ -87,21 +95,29 @@ function buildRequest(
 }
 
 export function MapPage() {
-  const { signOut } = useAuth();
+  const { session, signOut } = useAuth();
 
   // ---- live data ----------------------------------------------------------
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [accent, setAccent] = useState("#2f64e6");
+  const [tenantId, setTenantId] = useState<string | null>(null);
   const [types, setTypes] = useState<TypeCount[]>([]);
   const [observations, setObservations] = useState<Observation[]>([]);
-  const [rois, setRois] = useState<Roi[]>([]);
+  // blob: URLs for citizen-report thumbnails (WhatsApp photos), keyed by observation id.
+  // Streamed from the R2 broker once observations load; revoked on unmount.
+  const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({});
+  const [dimensionCounts, setDimensionCounts] = useState<DimensionCount[]>([]);
+  const roiCache = useRef<Map<string, Roi[]>>(new Map());
+  const [roiVersion, setRoiVersion] = useState(0); // bump after a lazy ROI fetch resolves
   const [boundary, setBoundary] = useState<unknown | null>(null);
   const [liveRuns, setLiveRuns] = useState<RunSummary[]>([]);
 
   // ---- layer toggles ------------------------------------------------------
   const [showPins, setShowPins] = useState(true);
-  const [showRois, setShowRois] = useState(true);
+  const [riskMaster, setRiskMaster] = useState(true);
+  const [riskExpanded, setRiskExpanded] = useState(true);
+  const [activeDimensions, setActiveDimensions] = useState<Record<string, boolean>>({});
   const [activeTypes, setActiveTypes] = useState<Record<string, boolean>>({});
 
   // ---- config (the dock) --------------------------------------------------
@@ -135,6 +151,17 @@ export function MapPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [panTarget, setPanTarget] = useState<{ lat: number; lng: number; n: number } | null>(null);
 
+  // ---- sweep ("recorrido") view -------------------------------------------
+  const [sweepRoute, setSweepRoute] = useState<SweepRoute | null>(null);
+  const [sweepLoading, setSweepLoading] = useState(false);
+
+  // ---- live observation stream -------------------------------------------
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [pulseIds, setPulseIds] = useState<Set<string>>(() => new Set());
+  const [fitTarget, setFitTarget] = useState<{ points: { lat: number; lng: number }[]; n: number } | null>(null);
+  const fitSeq = useRef(0);
+  const panSeq = useRef(0); // bumps panTarget.n so the fly-to re-triggers per "Ver"
+
   // The layers panel must clear whatever sits bottom-left: the dock/launcher
   // (always) and the observation card (only while one is open). Both are
   // anchored at bottom:18, so the taller wins.
@@ -153,11 +180,11 @@ export function MapPage() {
     let alive = true;
     (async () => {
       try {
-        const [tenant, tc, obs, ro, bnd, live] = await Promise.all([
+        const [tenant, tc, obs, dc, bnd, live] = await Promise.all([
           api.getActiveTenant(),
           api.getTypeCounts(),
           api.getObservations(),
-          api.getRois(),
+          api.getRoiDimensionCounts(),
           api.getBoundary(),
           api.listRuns(),
         ]);
@@ -166,10 +193,20 @@ export function MapPage() {
           setAccent(tenant.accent);
           document.documentElement.style.setProperty("--acc", tenant.accent);
         }
+        if (tenant?.id) setTenantId(tenant.id);
         setTypes(tc);
         setActiveTypes(Object.fromEntries(tc.map((t) => [t.slug, true])));
         setObservations(obs);
-        setRois(ro);
+        setDimensionCounts(dc);
+        // Enable every dimension that has data; pre-fetch their ROIs so the layer
+        // paints on first load (later toggles fetch lazily — see ensureDimLoaded).
+        const enabled = Object.fromEntries(dc.filter((d) => d.count > 0).map((d) => [d.dimension, true]));
+        setActiveDimensions(enabled);
+        const dims = Object.keys(enabled);
+        const fetched = await Promise.all(dims.map((d) => api.getRois([d])));
+        if (!alive) return;
+        dims.forEach((d, i) => roiCache.current.set(d, fetched[i]));
+        setRoiVersion((v) => v + 1);
         setBoundary(bnd);
         setLiveRuns(live);
         setLoaded(true);
@@ -181,6 +218,40 @@ export function MapPage() {
       alive = false;
     };
   }, []);
+
+  // ---- citizen-report thumbnails ------------------------------------------
+  // Each observation with a thumb_path (today: WhatsApp citizen reports) gets its photo
+  // streamed from the broker and shown as the map marker. Fetched once per id; the loaded
+  // set is tracked in a ref so this effect never re-fetches, and all blob: URLs are revoked
+  // when the page unmounts to avoid leaks.
+  const loadedThumbs = useRef<Set<string>>(new Set());
+  const thumbUrlsRef = useRef<Record<string, string>>({});
+  thumbUrlsRef.current = thumbUrls;
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      for (const o of observations) {
+        if (!o.thumbPath || loadedThumbs.current.has(o.id)) continue;
+        loadedThumbs.current.add(o.id);
+        const url = await fetchObjectUrl(THUMBNAIL_BUCKET, o.thumbPath);
+        if (!alive) {
+          if (url) URL.revokeObjectURL(url);
+          return;
+        }
+        if (url) setThumbUrls((m) => ({ ...m, [o.id]: url }));
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [observations]);
+  // Revoke every loaded thumbnail URL when the page unmounts.
+  useEffect(
+    () => () => {
+      for (const url of Object.values(thumbUrlsRef.current)) URL.revokeObjectURL(url);
+    },
+    [],
+  );
 
   // ---- derived ------------------------------------------------------------
   const typeLabels = useMemo(
@@ -213,6 +284,25 @@ export function MapPage() {
   );
 
   const pointCount = request.points.length;
+
+  // Risk zones to draw: union of the toggled-on dimensions' cached ROIs (empty when
+  // the master is off). roiVersion forces recompute after a lazy fetch fills the cache.
+  const roisToRender = useMemo<Roi[]>(() => {
+    if (!riskMaster) return [];
+    const out: Roi[] = [];
+    for (const [dim, on] of Object.entries(activeDimensions)) {
+      if (!on) continue;
+      const cached = roiCache.current.get(dim);
+      if (cached) out.push(...cached);
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [riskMaster, activeDimensions, roiVersion]);
+
+  const totalRoiCount = useMemo(
+    () => dimensionCounts.reduce((s, d) => s + d.count, 0),
+    [dimensionCounts],
+  );
 
   const historyItems = useMemo<PlanHistoryItem[]>(() => {
     const local: PlanHistoryItem[] = history.map((h) => ({
@@ -299,37 +389,151 @@ export function MapPage() {
       .finally(() => setDetailLoading(false));
   }, []);
 
+  // ---- live observation stream wiring ------------------------------------
+  // Authoritative refetch folded into the map state; debounced upstream by the hook.
+  const refetchObservations = useCallback(() => {
+    api.getObservations().then(setObservations).catch(() => {});
+  }, []);
+
+  const pushToast = useCallback((t: Toast) => {
+    setToasts((cur) => [t, ...cur].slice(0, 4)); // cap the stack
+    // Pulse the new pin(s) for ~3s.
+    const ids =
+      t.target.type === "point"
+        ? [t.target.observationId]
+        : []; // batch ids aren't in the lean payload target; pulse resolves on refetch below
+    if (ids.length) {
+      setPulseIds((cur) => new Set([...cur, ...ids]));
+      setTimeout(() => {
+        setPulseIds((cur) => {
+          const next = new Set(cur);
+          for (const id of ids) next.delete(id);
+          return next;
+        });
+      }, 3000);
+    }
+  }, []);
+
+  useObservationStream({
+    tenantId,
+    accessToken: session?.access_token ?? null,
+    labelFor: (slug) => typeLabels[slug] ?? slug,
+    onRefetch: refetchObservations,
+    onToast: pushToast,
+  });
+
+  const onToastAction = useCallback(
+    (t: Toast) => {
+      setToasts((cur) => cur.filter((x) => x.id !== t.id));
+      if (t.target.type === "point") {
+        onSelect(t.target.observationId);
+        panSeq.current += 1;
+        setPanTarget({ lat: t.target.lat, lng: t.target.lng, n: panSeq.current });
+      } else {
+        fitSeq.current += 1;
+        setFitTarget({ points: t.target.points, n: fitSeq.current });
+      }
+    },
+    [onSelect],
+  );
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts((cur) => cur.filter((x) => x.id !== id));
+  }, []);
+
+  // Resolve and show the inspection sweep behind an observation; fetch is fire-and-
+  // forget with a loading flag so the banner can render immediately.
+  const onViewSweep = useCallback((obsId: string) => {
+    setSweepLoading(true);
+    api
+      .getSweepRoute(obsId)
+      .then((sr) => setSweepRoute(sr))
+      .catch(() => setSweepRoute(null))
+      .finally(() => setSweepLoading(false));
+  }, []);
+
+  // Lazy per-dimension ROI fetch: a dimension's polygons load the first time it is
+  // switched on, then stay cached. Never ships every dimension's geometry up front.
+  const ensureDimLoaded = useCallback(async (dim: string) => {
+    if (roiCache.current.has(dim)) return;
+    const r = await api.getRois([dim]);
+    roiCache.current.set(dim, r);
+    setRoiVersion((v) => v + 1);
+  }, []);
+
+  const onToggleDimension = (dim: string) => {
+    const turningOn = !activeDimensions[dim];
+    setActiveDimensions((ad) => ({ ...ad, [dim]: !ad[dim] }));
+    if (turningOn) void ensureDimLoaded(dim);
+  };
+
+  const onToggleRiskMaster = () => {
+    const turningOn = !riskMaster;
+    setRiskMaster(turningOn);
+    if (turningOn) {
+      for (const d of Object.keys(activeDimensions)) {
+        if (activeDimensions[d]) void ensureDimLoaded(d);
+      }
+    }
+  };
+
   const onToggleType = (slug: string) =>
     setActiveTypes((at) => ({ ...at, [slug]: !at[slug] }));
 
   const onToggleRegion = (cve: string) =>
     setRegionFilter((rf) => (rf.includes(cve) ? rf.filter((c) => c !== cve) : [...rf, cve]));
 
-  const onAdjCost = (slug: string, delta: number) =>
-    setCosts((cs) => ({ ...cs, [slug]: Math.max(0, (cs[slug] ?? 0) + delta) }));
-
   const locateSquad = (lat: number, lng: number) =>
     setPanTarget({ lat, lng, n: (panTarget?.n ?? 0) + 1 });
 
-  // Natural-language command — parse via the Fly LLM endpoint and POPULATE the dock for the
-  // user to review. It never starts optimization. Returns parser notes (warnings/unresolved
-  // terms) for the panel to surface, or null when the draft was applied cleanly.
-  const onSubmitPrompt = useCallback(
-    async (prompt: string): Promise<string | null> => {
-      const draft: PlanDraft = await parseDraft(prompt, types, regions);
-      if (draft.issueType && ACTIVE_ISSUE_TYPES.has(draft.issueType)) setIssueType(draft.issueType);
-      if (typeof draft.budget === "number" && draft.budget > 0)
-        setBudget(Math.min(BUDGET_MAX, Math.max(BUDGET_MIN, draft.budget)));
-      if (Array.isArray(draft.regionFilter)) {
-        const valid = new Set(regions.map((r) => r.cve));
-        setRegionFilter(draft.regionFilter.filter((c) => valid.has(c)));
-      }
-      if (typeof draft.squadCount === "number") setSquadOverride(draft.squadCount);
+  // The draft accumulated across the agent conversation — sent back each turn as context so
+  // the model only changes what the user asks for.
+  const draftRef = useRef<PlanDraft | null>(null);
+
+  // Conversational agent turn — sends the full message history plus the draft so far and
+  // applies the merged draft to the dock. When the model reports generate=true (the user
+  // asked to run it) and a runnable issue type is set, it also triggers the plan and opens
+  // the preview. Returns the assistant's Spanish reply.
+  const onChat = useCallback(
+    async (messages: ChatMessage[]): Promise<string> => {
+      const res: DraftChatResponse = await chatDraft(messages, draftRef.current, types, regions);
+      const draft = res.draft;
+      draftRef.current = draft;
+
+      // Resolve the draft into a concrete config, falling back to current dock state for any
+      // field this turn didn't set. Held as locals so a generate turn can run the plan now
+      // without waiting for the setState calls below to flush.
+      const nextIssue =
+        draft.issueType && ACTIVE_ISSUE_TYPES.has(draft.issueType) ? draft.issueType : issueType;
+      const nextBudget =
+        typeof draft.budget === "number" && draft.budget > 0
+          ? Math.min(BUDGET_MAX, Math.max(BUDGET_MIN, draft.budget))
+          : budget;
+      const validCves = new Set(regions.map((r) => r.cve));
+      const nextRegions = Array.isArray(draft.regionFilter)
+        ? draft.regionFilter.filter((c) => validCves.has(c))
+        : regionFilter;
+      const nextSquad = typeof draft.squadCount === "number" ? draft.squadCount : squadOverride;
+
+      setIssueType(nextIssue);
+      setBudget(nextBudget);
+      setRegionFilter(nextRegions);
+      setSquadOverride(nextSquad);
       setDockOpen(true);
-      const notes = [...draft.unresolvedTerms, ...draft.warnings];
-      return notes.length ? notes.join(" · ") : null;
+
+      // Trigger optimization only on an explicit generate intent with a runnable issue type;
+      // fire-and-forget so the reply bubble renders before the preview takes over.
+      if (res.generate && ACTIVE_ISSUE_TYPES.has(nextIssue)) {
+        void startPlan({
+          issueType: nextIssue,
+          budget: nextBudget,
+          regionFilter: nextRegions,
+          squadOverride: nextSquad,
+        });
+      }
+      return res.reply;
     },
-    [types, regions],
+    [types, regions, issueType, budget, regionFilter, squadOverride, startPlan],
   );
 
   // ---- quick-action chips -------------------------------------------------
@@ -379,29 +583,53 @@ export function MapPage() {
     <div className="fixed inset-0 overflow-hidden bg-background text-foreground">
       <MapCanvas
         observations={observations}
+        thumbUrls={thumbUrls}
         boundary={boundary}
         showPins={showPins}
-        showRois={showRois}
+        showRois={riskMaster}
         activeTypes={activeTypes}
+        regionFilter={regionFilter}
         plan={activePlan}
-        rois={rois}
+        rois={roisToRender}
+        highlightSweep={sweepRoute?.sweep ?? null}
         selectedId={selectedId}
         accent={accent}
         panTarget={panTarget}
+        pulseIds={pulseIds}
+        fitTarget={fitTarget}
         onSelect={onSelect}
       />
+
+      {(sweepRoute || sweepLoading) && (
+        <SweepBanner
+          route={sweepRoute}
+          loading={sweepLoading}
+          accent={accent}
+          onClose={() => {
+            setSweepRoute(null);
+            setSweepLoading(false);
+          }}
+        />
+      )}
+
+      {sweepRoute && <SweepVideo route={sweepRoute} />}
 
       <LayersPanel
         types={types}
         totalObs={observations.length}
-        roiCount={rois.length}
         showPins={showPins}
-        showRois={showRois}
+        riskMaster={riskMaster}
+        riskExpanded={riskExpanded}
+        dimensionCounts={dimensionCounts}
+        activeDimensions={activeDimensions}
+        totalRoiCount={totalRoiCount}
         activeTypes={activeTypes}
         lastSweepLabel={`${observations.length} obs · en vivo`}
         bottom={layersBottom}
         onTogglePins={() => setShowPins((v) => !v)}
-        onToggleRois={() => setShowRois((v) => !v)}
+        onToggleRiskMaster={onToggleRiskMaster}
+        onToggleRiskExpanded={() => setRiskExpanded((v) => !v)}
+        onToggleDimension={onToggleDimension}
         onToggleType={onToggleType}
         onSignOut={signOut}
       />
@@ -411,21 +639,16 @@ export function MapPage() {
         plan={activePlan}
         typeLabels={typeLabels}
         chips={chips}
-        onSubmitPrompt={onSubmitPrompt}
+        onChat={onChat}
         onClosePreview={closePreview}
         onLocateObs={onSelect}
         onLocateSquad={locateSquad}
       />
 
       <AnalysisDock
-        issueType={issueType}
         budget={budget}
         regions={regions}
         regionFilter={regionFilter}
-        squadOverride={squadOverride}
-        costs={costs}
-        types={types}
-        typeLabels={typeLabels}
         pointCount={pointCount}
         previewing={previewing}
         generating={generating}
@@ -433,12 +656,9 @@ export function MapPage() {
         hasHistory={historyItems.length > 0}
         open={dockOpen}
         onToggleOpen={() => setDockOpen((v) => !v)}
-        onSetIssueType={setIssueType}
         onBudget={setBudget}
         onToggleRegion={onToggleRegion}
         onClearRegions={() => setRegionFilter([])}
-        onSetSquadOverride={setSquadOverride}
-        onAdjCost={onAdjCost}
         onGenerate={onGenerate}
         onToggleHistory={() => setHistOpen((v) => !v)}
         onHeight={setDockHeight}
@@ -457,6 +677,7 @@ export function MapPage() {
         <ObservationCard
           detail={detail}
           loading={detailLoading}
+          onViewSweep={onViewSweep}
           onHeight={setCardHeight}
           onClose={() => {
             setSelectedId(null);
@@ -464,9 +685,121 @@ export function MapPage() {
           }}
         />
       )}
+
+      <ToastStack toasts={toasts} onAction={onToastAction} onDismiss={dismissToast} />
     </div>
   );
 }
 
 const CENTER_MSG =
   "fixed inset-0 flex items-center justify-center gap-[11px] bg-background text-[13px] text-muted-foreground";
+
+// Formats a sweep's [start, end] window. Same-day windows collapse to one date with a
+// time range; multi-day windows show both dates. Spanish, CDMX time.
+const DATE_FMT = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short", timeZone: "America/Mexico_City" });
+const TIME_FMT = new Intl.DateTimeFormat("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" });
+
+function sweepWindow(startIso: string, endIso: string): string {
+  const s = new Date(startIso);
+  const e = new Date(endIso);
+  if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return "—";
+  const sameDay = DATE_FMT.format(s) === DATE_FMT.format(e);
+  return sameDay
+    ? `${DATE_FMT.format(s)} · ${TIME_FMT.format(s)}–${TIME_FMT.format(e)}`
+    : `${DATE_FMT.format(s)} – ${DATE_FMT.format(e)}`;
+}
+
+// Top-center banner shown while the sweep ("recorrido") coverage overlay is active.
+function SweepBanner({
+  route,
+  loading,
+  accent,
+  onClose,
+}: {
+  route: SweepRoute | null;
+  loading: boolean;
+  accent: string;
+  onClose: () => void;
+}) {
+  return (
+    <Panel className="absolute left-1/2 top-[18px] z-[540] flex -translate-x-1/2 items-center gap-3 py-2 pl-3 pr-2">
+      <span className="size-2.5 shrink-0 rounded-full" style={{ background: accent }} />
+      {loading || !route ? (
+        <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
+          <Spinner size={14} /> Cargando recorrido…
+        </div>
+      ) : (
+        <div className="flex items-center gap-2.5 text-[12px]">
+          <span className="font-mono text-[12px] font-bold tracking-[-0.2px]">{route.sweep}</span>
+          <span className="text-[var(--line-strong)]">·</span>
+          <span className="text-muted-foreground">{route.obsCount.toLocaleString("es-MX")} obs</span>
+          <span className="text-[var(--line-strong)]">·</span>
+          <span className="text-muted-foreground">{route.areaKm2.toFixed(1)} km²</span>
+          <span className="text-[var(--line-strong)]">·</span>
+          <span className="text-muted-foreground">{sweepWindow(route.startedAt, route.endedAt)}</span>
+        </div>
+      )}
+      <Button
+        variant="secondary"
+        size="icon-xs"
+        onClick={onClose}
+        title="Salir del recorrido"
+        className="size-[25px] shrink-0 rounded-[7px] bg-[#f1f4f8] text-base leading-none text-[var(--ink-2)]"
+      >
+        ×
+      </Button>
+    </Panel>
+  );
+}
+
+// Inline player for a sweep's recorded inspection footage. Streams the R2 sweep-video
+// object through the broker (as an authorized blob: URL) and plays it under the banner.
+// Renders nothing until a video path is present and the bytes resolve.
+function SweepVideo({ route }: { route: SweepRoute | null }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const path = route?.videoPath ?? null;
+  const bucket = route?.videoBucket ?? null;
+
+  useEffect(() => {
+    if (!path || !bucket) {
+      setSrc(null);
+      return;
+    }
+    let url: string | null = null;
+    let alive = true;
+    fetchBlobUrl(bucket, path).then((u) => {
+      if (!alive) {
+        if (u) URL.revokeObjectURL(u);
+        return;
+      }
+      url = u;
+      setSrc(u);
+    });
+    return () => {
+      alive = false;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [bucket, path]);
+
+  if (!path) return null;
+
+  return (
+    <Panel className="absolute left-1/2 top-[62px] z-[540] w-[360px] max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden p-1.5">
+      {src ? (
+        <video
+          src={src}
+          controls
+          autoPlay
+          loop
+          muted
+          playsInline
+          className="block w-full rounded-[7px] bg-black"
+        />
+      ) : (
+        <div className="flex aspect-video items-center justify-center gap-2 rounded-[7px] bg-[#0c1118] text-[12px] text-white/70">
+          <Spinner size={14} /> Cargando video…
+        </div>
+      )}
+    </Panel>
+  );
+}

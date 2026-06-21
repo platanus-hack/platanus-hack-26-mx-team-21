@@ -1,0 +1,6 @@
+# Orchestrator deps (install with --no-deps-sensitive care if reusing the NGC image).
+grpcio
+grpcio-tools
+tritonclient[grpc]
+httpx
+numpy

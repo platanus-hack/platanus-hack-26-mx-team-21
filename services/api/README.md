@@ -166,3 +166,17 @@ fly scale count 0          # stop serving
 fly apps destroy citycrawl-api    # remove app, Machines, and release history
 ```
 Durable data is unaffected — it lives in Supabase and R2, not on Fly.
+
+## Planning engine
+
+`/v1/planning/optimize` and `/priorities:cluster` are served by the real
+`OptimizationPlanningEngine` (set `PLANNING_ENGINE=mock` to fall back to the baseline).
+Criticality is traffic-weighted; the endpoint reads a **cached** traffic layer and never
+calls TomTom. Warm the cache before/after deploy:
+
+    export TOMTOM_API_KEY=...        # in services/api/.env
+    citycrawl-planning warm-traffic --from-file locations.csv
+
+`locations.csv` is one `lat,lng` per line (export observation coordinates from Supabase).
+On a cache miss the engine uses a neutral default factor, so the plan still ranks by
+volume until the cache is warmed.

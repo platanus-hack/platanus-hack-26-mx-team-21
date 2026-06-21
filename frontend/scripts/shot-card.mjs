@@ -11,7 +11,7 @@ const page = await browser.newPage();
 page.on("pageerror", (e) => console.log("PAGEERROR", e.message));
 await page.goto("http://localhost:5173/", { waitUntil: "networkidle2" });
 await page.waitForSelector('input[type="password"]');
-await page.type('input[type="password"]', "vialia-dev-2026!");
+await page.type('input[type="password"]', "citycrawl-dev-2026!");
 await page.click('button[type="submit"]');
 await page.waitForFunction(() => /CAPAS/i.test(document.body.innerText), { timeout: 20000 });
 await wait(3500);

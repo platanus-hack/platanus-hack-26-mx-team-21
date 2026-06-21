@@ -1,7 +1,7 @@
 set search_path = public, extensions;
 
 insert into platform.tenants (id, name, status) values
-  ('a0000000-0000-0000-0000-000000000001','Vialia CDMX','active')
+  ('a0000000-0000-0000-0000-000000000001','CityCrawl CDMX','active')
 on conflict do nothing;
 
 insert into geo.geo_editions (id, source_name, source_release, effective_date, status, imported_at) values

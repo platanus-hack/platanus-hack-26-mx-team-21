@@ -10,6 +10,8 @@ interface Props {
   detail: ObservationDetail | null;
   loading: boolean;
   onClose: () => void;
+  /** Show this observation's inspection sweep ("recorrido") coverage on the map. */
+  onViewSweep: (id: string) => void;
   /** Reports the card's rendered height so the layers panel can lift clear of it. */
   onHeight?: (h: number) => void;
 }
@@ -26,7 +28,7 @@ function agoLabel(iso: string): string {
   return `hace ${Math.round(hrs / 24)} d`;
 }
 
-export function ObservationCard({ detail, loading, onClose, onHeight }: Props) {
+export function ObservationCard({ detail, loading, onClose, onViewSweep, onHeight }: Props) {
   const ref = useRef<HTMLDivElement>(null);
 
   // Keep the layers panel informed of our height (varies between the loading
@@ -129,15 +131,15 @@ export function ObservationCard({ detail, loading, onClose, onHeight }: Props) {
         </div>
 
         <Button
-          disabled
           variant="ghost"
-          title="La vista de recorrido llegará pronto"
-          className="mt-[11px] h-[38px] w-full gap-2 rounded-[10px] bg-[var(--bg)] text-[12px] font-bold text-[var(--muted-ink-2)] disabled:opacity-100"
+          title={`Ver el área cubierta por el recorrido ${d.sweep}`}
+          onClick={() => onViewSweep(d.id)}
+          className="mt-[11px] h-[38px] w-full gap-2 rounded-[10px] bg-[var(--bg)] text-[12px] font-bold text-[var(--ink-2)] hover:bg-[var(--surface-1)]"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-            <path d="M8 5l11 7-11 7V5z" fill="#9aa3b1" />
+            <path d="M8 5l11 7-11 7V5z" fill="currentColor" />
           </svg>
-          Ver recorrido {d.sweep} (próximamente)
+          Ver recorrido {d.sweep}
         </Button>
       </div>
     </Panel>

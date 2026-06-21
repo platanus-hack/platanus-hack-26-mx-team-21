@@ -20,6 +20,7 @@ dev = ["pytest>=8", "anyio>=4"]
 [project.scripts]
 # Local Typer adapter over the same DatasetRefreshService the HTTP endpoint uses.
 citycrawl-datasets = "citycrawl_api.modules.datasets.cli:app"
+citycrawl-planning = "citycrawl_api.modules.planning.cli:app"
 
 [build-system]
 requires = ["setuptools>=68"]

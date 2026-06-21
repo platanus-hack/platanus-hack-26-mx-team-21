@@ -71,9 +71,9 @@ Grab the values the other components need (Dashboard → Project Settings → AP
 
 ### Test users tied to a tenant
 
-Seeded dev users (password `vialia-dev-2026!`) live in `supabase/seed/20_auth.sql`:
-`author.a@vialia.test` (analysis_author), `viewer.a@vialia.test` (viewer),
-`nomember@vialia.test` (no membership). Tenant: **Vialia CDMX**.
+Seeded dev users (password `citycrawl-dev-2026!`) live in `supabase/seed/20_auth.sql`:
+`author.a@citycrawl.test` (analysis_author), `viewer.a@citycrawl.test` (viewer),
+`nomember@citycrawl.test` (no membership). Tenant: **CityCrawl CDMX**.
 
 To add another user by hand, insert across all four tables in one transaction:
 `auth.users` → `auth.identities` (email provider) → `platform.oidc_subjects`

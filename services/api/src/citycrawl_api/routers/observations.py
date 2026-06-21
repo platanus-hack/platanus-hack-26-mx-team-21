@@ -146,8 +146,11 @@ async def create_citizen_observation(
     except Exception as exc:  # noqa: BLE001 - surfaced as a clean 502
         raise ApiError(502, "storage_write_failed", "Could not store the report image") from exc
 
-    # Confirmation gate (disabled by default). When enabled, the photo must be confirmed
-    # by the non-public inference server before we create the observation.
+    # Confirmation gate (optional): when enabled, the photo must be confirmed by the
+    # non-public inference server before we create the observation. This is SYNCHRONOUS and
+    # blocks the WhatsApp reply for up to inference_timeout_s, and rejects (422) on timeout —
+    # so it is gated behind a kill switch. When disabled, we skip it and create the
+    # observation immediately (fast path); confirmation can run asynchronously elsewhere.
     if settings.inference_confirmation_enabled:
         jobs = PgInferenceJobStore(settings.db_url)
         job_id = jobs.enqueue(

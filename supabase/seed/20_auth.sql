@@ -6,14 +6,14 @@ insert into auth.users
    raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
    confirmation_token, recovery_token, email_change_token_new, email_change)
 values
-  ('00000000-0000-0000-0000-000000000000','c0000000-0000-0000-0000-00000000000a','authenticated','authenticated','author.a@vialia.test',
-     extensions.crypt('vialia-dev-2026!', extensions.gen_salt('bf')),'2026-06-01 00:00:00+00',
+  ('00000000-0000-0000-0000-000000000000','c0000000-0000-0000-0000-00000000000a','authenticated','authenticated','author.a@citycrawl.test',
+     extensions.crypt('citycrawl-dev-2026!', extensions.gen_salt('bf')),'2026-06-01 00:00:00+00',
      '{"provider":"email","providers":["email"]}','{"display_name":"Author A"}','2026-06-01 00:00:00+00','2026-06-01 00:00:00+00','','','',''),
-  ('00000000-0000-0000-0000-000000000000','c0000000-0000-0000-0000-00000000000b','authenticated','authenticated','viewer.a@vialia.test',
-     extensions.crypt('vialia-dev-2026!', extensions.gen_salt('bf')),'2026-06-01 00:00:00+00',
+  ('00000000-0000-0000-0000-000000000000','c0000000-0000-0000-0000-00000000000b','authenticated','authenticated','viewer.a@citycrawl.test',
+     extensions.crypt('citycrawl-dev-2026!', extensions.gen_salt('bf')),'2026-06-01 00:00:00+00',
      '{"provider":"email","providers":["email"]}','{"display_name":"Viewer A"}','2026-06-01 00:00:00+00','2026-06-01 00:00:00+00','','','',''),
-  ('00000000-0000-0000-0000-000000000000','c0000000-0000-0000-0000-00000000000c','authenticated','authenticated','nomember@vialia.test',
-     extensions.crypt('vialia-dev-2026!', extensions.gen_salt('bf')),'2026-06-01 00:00:00+00',
+  ('00000000-0000-0000-0000-000000000000','c0000000-0000-0000-0000-00000000000c','authenticated','authenticated','nomember@citycrawl.test',
+     extensions.crypt('citycrawl-dev-2026!', extensions.gen_salt('bf')),'2026-06-01 00:00:00+00',
      '{"provider":"email","providers":["email"]}','{"display_name":"No Member"}','2026-06-01 00:00:00+00','2026-06-01 00:00:00+00','','','','')
 on conflict (id) do nothing;
 
@@ -22,11 +22,11 @@ insert into auth.identities
   (id, provider_id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
 values
   ('1de0000a-0000-0000-0000-00000000000a','c0000000-0000-0000-0000-00000000000a','c0000000-0000-0000-0000-00000000000a',
-     '{"sub":"c0000000-0000-0000-0000-00000000000a","email":"author.a@vialia.test","email_verified":true}','email','2026-06-01 00:00:00+00','2026-06-01 00:00:00+00','2026-06-01 00:00:00+00'),
+     '{"sub":"c0000000-0000-0000-0000-00000000000a","email":"author.a@citycrawl.test","email_verified":true}','email','2026-06-01 00:00:00+00','2026-06-01 00:00:00+00','2026-06-01 00:00:00+00'),
   ('1de0000b-0000-0000-0000-00000000000b','c0000000-0000-0000-0000-00000000000b','c0000000-0000-0000-0000-00000000000b',
-     '{"sub":"c0000000-0000-0000-0000-00000000000b","email":"viewer.a@vialia.test","email_verified":true}','email','2026-06-01 00:00:00+00','2026-06-01 00:00:00+00','2026-06-01 00:00:00+00'),
+     '{"sub":"c0000000-0000-0000-0000-00000000000b","email":"viewer.a@citycrawl.test","email_verified":true}','email','2026-06-01 00:00:00+00','2026-06-01 00:00:00+00','2026-06-01 00:00:00+00'),
   ('1de0000c-0000-0000-0000-00000000000c','c0000000-0000-0000-0000-00000000000c','c0000000-0000-0000-0000-00000000000c',
-     '{"sub":"c0000000-0000-0000-0000-00000000000c","email":"nomember@vialia.test","email_verified":true}','email','2026-06-01 00:00:00+00','2026-06-01 00:00:00+00','2026-06-01 00:00:00+00')
+     '{"sub":"c0000000-0000-0000-0000-00000000000c","email":"nomember@citycrawl.test","email_verified":true}','email','2026-06-01 00:00:00+00','2026-06-01 00:00:00+00','2026-06-01 00:00:00+00')
 on conflict (provider_id, provider) do nothing;
 
 -- oidc_subjects bridge (issuer null => Supabase is the issuer)

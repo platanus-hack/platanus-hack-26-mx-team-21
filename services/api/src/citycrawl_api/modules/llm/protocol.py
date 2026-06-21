@@ -3,10 +3,17 @@ adapter is AnthropicDraftParser. No unused provider factory or second adapter is
 from __future__ import annotations
 from typing import Protocol
 
-from citycrawl_api.modules.llm.models import DraftParseRequest, PlanDraft
+from citycrawl_api.modules.llm.models import (
+    DraftChatRequest,
+    DraftChatResponse,
+    DraftParseRequest,
+    PlanDraft,
+)
 
 
 class DraftParser(Protocol):
     name: str
 
     async def parse(self, request: DraftParseRequest) -> PlanDraft: ...
+
+    async def chat(self, request: DraftChatRequest) -> DraftChatResponse: ...
