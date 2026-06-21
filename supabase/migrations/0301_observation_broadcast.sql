@@ -51,6 +51,7 @@ begin
 end;
 $$;
 
+drop trigger if exists tvo_broadcast_observation on platform.tenant_visible_observations;
 create trigger tvo_broadcast_observation
   after insert on platform.tenant_visible_observations
   for each row execute function community.broadcast_observation();
